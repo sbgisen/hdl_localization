@@ -52,6 +52,7 @@ public:
 
     robot_odom_frame_id = private_nh.param<std::string>("robot_odom_frame_id", "robot_odom");
     odom_child_frame_id = private_nh.param<std::string>("odom_child_frame_id", "base_link");
+    enable_tf = private_nh.param<bool>("enable_tf", true);
 
     use_imu = private_nh.param<bool>("use_imu", true);
     invert_acc = private_nh.param<bool>("invert_acc", false);
@@ -398,35 +399,37 @@ private:
    */
   void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose) {
     // broadcast the transform over tf
-    if(tf_buffer.canTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0))) {
-      geometry_msgs::TransformStamped map_wrt_frame = tf2::eigenToTransform(Eigen::Isometry3d(pose.inverse().cast<double>()));
-      map_wrt_frame.header.stamp = stamp;
-      map_wrt_frame.header.frame_id = odom_child_frame_id;
-      map_wrt_frame.child_frame_id = "map";
+    if(enable_tf){
+      if(tf_buffer.canTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0))) {
+        geometry_msgs::TransformStamped map_wrt_frame = tf2::eigenToTransform(Eigen::Isometry3d(pose.inverse().cast<double>()));
+        map_wrt_frame.header.stamp = stamp;
+        map_wrt_frame.header.frame_id = odom_child_frame_id;
+        map_wrt_frame.child_frame_id = "map";
 
-      geometry_msgs::TransformStamped frame_wrt_odom = tf_buffer.lookupTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0), ros::Duration(0.1));
-      Eigen::Matrix4f frame2odom = tf2::transformToEigen(frame_wrt_odom).cast<float>().matrix();
+        geometry_msgs::TransformStamped frame_wrt_odom = tf_buffer.lookupTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0), ros::Duration(0.1));
+        Eigen::Matrix4f frame2odom = tf2::transformToEigen(frame_wrt_odom).cast<float>().matrix();
 
-      geometry_msgs::TransformStamped map_wrt_odom;
-      tf2::doTransform(map_wrt_frame, map_wrt_odom, frame_wrt_odom);
+        geometry_msgs::TransformStamped map_wrt_odom;
+        tf2::doTransform(map_wrt_frame, map_wrt_odom, frame_wrt_odom);
 
-      tf2::Transform odom_wrt_map;
-      tf2::fromMsg(map_wrt_odom.transform, odom_wrt_map);
-      odom_wrt_map = odom_wrt_map.inverse();
+        tf2::Transform odom_wrt_map;
+        tf2::fromMsg(map_wrt_odom.transform, odom_wrt_map);
+        odom_wrt_map = odom_wrt_map.inverse();
 
-      geometry_msgs::TransformStamped odom_trans;
-      odom_trans.transform = tf2::toMsg(odom_wrt_map);
-      odom_trans.header.stamp = stamp;
-      odom_trans.header.frame_id = "map";
-      odom_trans.child_frame_id = robot_odom_frame_id;
+        geometry_msgs::TransformStamped odom_trans;
+        odom_trans.transform = tf2::toMsg(odom_wrt_map);
+        odom_trans.header.stamp = stamp;
+        odom_trans.header.frame_id = "map";
+        odom_trans.child_frame_id = robot_odom_frame_id;
 
-      tf_broadcaster.sendTransform(odom_trans);
-    } else {
-      geometry_msgs::TransformStamped odom_trans = tf2::eigenToTransform(Eigen::Isometry3d(pose.cast<double>()));
-      odom_trans.header.stamp = stamp;
-      odom_trans.header.frame_id = "map";
-      odom_trans.child_frame_id = odom_child_frame_id;
-      tf_broadcaster.sendTransform(odom_trans);
+        tf_broadcaster.sendTransform(odom_trans);
+      } else {
+        geometry_msgs::TransformStamped odom_trans = tf2::eigenToTransform(Eigen::Isometry3d(pose.cast<double>()));
+        odom_trans.header.stamp = stamp;
+        odom_trans.header.frame_id = "map";
+        odom_trans.child_frame_id = odom_child_frame_id;
+        tf_broadcaster.sendTransform(odom_trans);
+      }
     }
 
     // publish the transform
@@ -502,6 +505,7 @@ private:
 
   std::string robot_odom_frame_id;
   std::string odom_child_frame_id;
+  bool enable_tf;
 
   bool use_imu;
   bool invert_acc;
