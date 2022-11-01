@@ -265,7 +265,8 @@ private:
     }
 
     // correct
-    auto aligned = pose_estimator->correct(stamp, filtered);
+    double fitness_score;
+    auto aligned = pose_estimator->correct(stamp, filtered, &fitness_score);
 
     if(aligned_pub.getNumSubscribers()) {
       aligned->header.frame_id = "map";
@@ -277,7 +278,7 @@ private:
       publish_scan_matching_status(points_msg->header, aligned);
     }
 
-    publish_odometry(points_msg->header.stamp, pose_estimator->matrix());
+    publish_odometry(points_msg->header.stamp, pose_estimator->matrix(), fitness_score);
   }
 
   /**
@@ -397,7 +398,7 @@ private:
    * @param stamp  timestamp
    * @param pose   odometry pose to be published
    */
-  void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose) {
+  void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose, const double fitness_score) {
     // broadcast the transform over tf
     if(enable_tf){
       if(tf_buffer.canTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0))) {
@@ -438,10 +439,16 @@ private:
     odom.header.frame_id = "map";
 
     tf::poseEigenToMsg(Eigen::Isometry3d(pose.cast<double>()), odom.pose.pose);
+    for(int i=0; i<36; i++){
+      odom.pose.covariance[i] = fitness_score;
+    }
     odom.child_frame_id = odom_child_frame_id;
     odom.twist.twist.linear.x = 0.0;
     odom.twist.twist.linear.y = 0.0;
     odom.twist.twist.angular.z = 0.0;
+    for(int i=0; i<36; i++){
+      odom.twist.covariance[i] = fitness_score;
+    }
 
     pose_pub.publish(odom);
   }
