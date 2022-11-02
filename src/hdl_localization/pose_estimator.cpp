@@ -133,7 +133,7 @@ void PoseEstimator::predict_odom(const Eigen::Matrix4f& odom_delta) {
  * @param cloud   input cloud
  * @return cloud aligned to the globalmap
  */
-pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Time& stamp, const pcl::PointCloud<PointT>::ConstPtr& cloud) {
+pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Time& stamp, const pcl::PointCloud<PointT>::ConstPtr& cloud, double* fitness_score) {
   last_correction_stamp = stamp;
 
   Eigen::Matrix4f no_guess = last_observation;
@@ -177,6 +177,7 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
   pcl::PointCloud<PointT>::Ptr aligned(new pcl::PointCloud<PointT>());
   registration->setInputSource(cloud);
   registration->align(*aligned, init_guess);
+  *fitness_score = registration->getFitnessScore();
 
   Eigen::Matrix4f trans = registration->getFinalTransformation();
   Eigen::Vector3f p = trans.block<3, 1>(0, 3);
