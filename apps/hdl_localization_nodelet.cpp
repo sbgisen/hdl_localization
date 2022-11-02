@@ -441,14 +441,22 @@ private:
     double fitness_score_coefficient = private_nh.param<double>("fitness_score_coefficient", 1.0);
     tf::poseEigenToMsg(Eigen::Isometry3d(pose.cast<double>()), odom.pose.pose);
     for(int i=0; i<36; i++){
-      odom.pose.covariance[i] = fitness_score_coefficient * fitness_score;
+      if(i%7==0){
+        odom.pose.covariance[i] = fitness_score_coefficient * fitness_score;
+      }else{
+        odom.pose.covariance[i] = 0.0;
+      }
     }
     odom.child_frame_id = odom_child_frame_id;
     odom.twist.twist.linear.x = 0.0;
     odom.twist.twist.linear.y = 0.0;
     odom.twist.twist.angular.z = 0.0;
     for(int i=0; i<36; i++){
-      odom.twist.covariance[i] = fitness_score_coefficient * fitness_score;
+      if(i%7==0){
+        odom.twist.covariance[i] = fitness_score_coefficient * fitness_score;
+      }else{
+        odom.twist.covariance[i] = 0.0;
+      }  
     }
 
     pose_pub.publish(odom);
