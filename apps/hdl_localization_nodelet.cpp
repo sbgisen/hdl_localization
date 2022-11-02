@@ -438,16 +438,17 @@ private:
     odom.header.stamp = stamp;
     odom.header.frame_id = "map";
 
+    double fitness_score_coefficient = private_nh.param<double>("fitness_score_coefficient", 1.0);
     tf::poseEigenToMsg(Eigen::Isometry3d(pose.cast<double>()), odom.pose.pose);
     for(int i=0; i<36; i++){
-      odom.pose.covariance[i] = fitness_score;
+      odom.pose.covariance[i] = fitness_score_coefficient * fitness_score;
     }
     odom.child_frame_id = odom_child_frame_id;
     odom.twist.twist.linear.x = 0.0;
     odom.twist.twist.linear.y = 0.0;
     odom.twist.twist.angular.z = 0.0;
     for(int i=0; i<36; i++){
-      odom.twist.covariance[i] = fitness_score;
+      odom.twist.covariance[i] = fitness_score_coefficient * fitness_score;
     }
 
     pose_pub.publish(odom);
