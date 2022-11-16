@@ -436,26 +436,18 @@ private:
     odom.header.stamp = stamp;
     odom.header.frame_id = "map";
 
-    double fitness_score_coefficient = private_nh.param<double>("odom_covariance_coefficient", 1.0);
     tf::poseEigenToMsg(Eigen::Isometry3d(pose.cast<double>()), odom.pose.pose);
-    for (int i = 0; i < 36; i++) {
-      if (i % 7 == 0) {
-        odom.pose.covariance[i] = fitness_score_coefficient * fitness_score;
-      } else {
-        odom.pose.covariance[i] = 0.0;
-      }
-    }
+    odom.pose.covariance[0] = private_nh.param<double>("cov_scaling_factor_x", 1.0) * fitness_score;
+    odom.pose.covariance[7] = private_nh.param<double>("cov_scaling_factor_y", 1.0) * fitness_score;
+    odom.pose.covariance[14] = private_nh.param<double>("cov_scaling_factor_z", 1.0) * fitness_score;
+    odom.pose.covariance[21] = private_nh.param<double>("cov_scaling_factor_R", 1.0) * fitness_score;
+    odom.pose.covariance[28] = private_nh.param<double>("cov_scaling_factor_P", 1.0) * fitness_score;
+    odom.pose.covariance[35] = private_nh.param<double>("cov_scaling_factor_Y", 1.0) * fitness_score;
+
     odom.child_frame_id = odom_child_frame_id;
     odom.twist.twist.linear.x = 0.0;
     odom.twist.twist.linear.y = 0.0;
     odom.twist.twist.angular.z = 0.0;
-    for (int i = 0; i < 36; i++) {
-      if (i % 7 == 0) {
-        odom.twist.covariance[i] = fitness_score_coefficient * fitness_score;
-      } else {
-        odom.twist.covariance[i] = 0.0;
-      }
-    }
 
     pose_pub.publish(odom);
   }
