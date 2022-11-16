@@ -62,7 +62,12 @@
       <param name="init_ori_x" value="0.0" />
       <param name="init_ori_y" value="0.0" />
       <param name="init_ori_z" value="0.0" />
-      <param name="odom_covariance_coefficient" value="1.0" />
+      <param name="cov_scaling_factor_x" value="1.0" />
+      <param name="cov_scaling_factor_y" value="1.0" />
+      <param name="cov_scaling_factor_z" value="1.0" />
+      <param name="cov_scaling_factor_R" value="1.0" />
+      <param name="cov_scaling_factor_P" value="1.0" />
+      <param name="cov_scaling_factor_Y" value="1.0" />
 
       <param name="use_global_localization" value="$(arg use_global_localization)" />
     </node>
