@@ -45,14 +45,20 @@ public:
     nh = getNodeHandle();
     mt_nh = getMTNodeHandle();
     private_nh = getPrivateNodeHandle();
+    odom_stamp_last = ros::Time::now();
 
     initialize_params();
 
+    use_odom = private_nh.param<bool>("enable_robot_odometry_prediction", false);
     robot_odom_frame_id = private_nh.param<std::string>("robot_odom_frame_id", "robot_odom");
     odom_child_frame_id = private_nh.param<std::string>("odom_child_frame_id", "base_link");
     enable_tf = private_nh.param<bool>("enable_tf", true);
 
     use_imu = private_nh.param<bool>("use_imu", true);
+    if (use_odom && use_imu) {
+      NODELET_WARN("[HdlLocalizationNodelet] Both use_odom and use_imu enabled -> disabling use_imu");
+      use_imu = false;
+    }
     invert_acc = private_nh.param<bool>("invert_acc", false);
     invert_gyro = private_nh.param<bool>("invert_gyro", false);
     if (use_imu) {
@@ -205,6 +211,11 @@ private:
       return;
     }
 
+    ros::Time last_correction_time = pose_estimator->last_correction_time();
+    // Skip calculation if timestamp is wrong
+    if (stamp < last_correction_time) {
+      return;
+    }
     // transform pointcloud into odom_child_frame_id
     std::string tfError;
     pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());
@@ -227,10 +238,8 @@ private:
 
     Eigen::Matrix4f before = pose_estimator->matrix();
 
-    // predict
-    if (!use_imu) {
-      pose_estimator->predict(stamp);
-    } else {
+    if (use_imu) {
+      // IMU-based prediction
       std::lock_guard<std::mutex> lock(imu_data_mutex);
       auto imu_iter = imu_data.begin();
       for (imu_iter; imu_iter != imu_data.end(); imu_iter++) {
@@ -241,30 +250,41 @@ private:
         const auto& gyro = (*imu_iter)->angular_velocity;
         double acc_sign = invert_acc ? -1.0 : 1.0;
         double gyro_sign = invert_gyro ? -1.0 : 1.0;
-        pose_estimator->predict((*imu_iter)->header.stamp, acc_sign * Eigen::Vector3f(acc.x, acc.y, acc.z), gyro_sign * Eigen::Vector3f(gyro.x, gyro.y, gyro.z));
+        pose_estimator->predict_imu((*imu_iter)->header.stamp, acc_sign * Eigen::Vector3f(acc.x, acc.y, acc.z), gyro_sign * Eigen::Vector3f(gyro.x, gyro.y, gyro.z));
       }
       imu_data.erase(imu_data.begin(), imu_iter);
-    }
-
-    // odometry-based prediction
-    ros::Time last_correction_time = pose_estimator->last_correction_time();
-    if (private_nh.param<bool>("enable_robot_odometry_prediction", false) && !last_correction_time.isZero()) {
-      geometry_msgs::TransformStamped odom_delta;
-      if (tf_buffer.canTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, stamp, robot_odom_frame_id, ros::Duration(0.1))) {
-        odom_delta = tf_buffer.lookupTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, stamp, robot_odom_frame_id, ros::Duration(0));
-      } else if (tf_buffer.canTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0))) {
-        odom_delta = tf_buffer.lookupTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0));
-      }
-
-      if (odom_delta.header.stamp.isZero()) {
-        NODELET_WARN_STREAM("failed to look up transform between " << cloud->header.frame_id << " and " << robot_odom_frame_id);
+    } else if (use_odom) {
+      // Odometry-based prediction
+      if (tf_buffer.canTransform(odom_child_frame_id, odom_stamp_last, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0))) {
+        // Get the amount of odometry movement since the last calculation
+        // Coordinate system where the front of the robot is x
+        geometry_msgs::TransformStamped odom_delta =
+          tf_buffer.lookupTransform(odom_child_frame_id, odom_stamp_last, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0));
+        // Get the latest TF to get the time
+        geometry_msgs::TransformStamped odom_latest = tf_buffer.lookupTransform(odom_child_frame_id, odom_child_frame_id, ros::Time(0));
+        ros::Time odom_stamp = odom_latest.header.stamp;
+        ros::Duration odom_time_diff = odom_stamp - odom_stamp_last;
+        double odom_time_diff_sec = odom_time_diff.toSec();
+        if (odom_delta.header.stamp.isZero() || odom_time_diff_sec <= 0) {
+          NODELET_WARN_STREAM("failed to look up transform between " << cloud->header.frame_id << " and " << robot_odom_frame_id);
+        } else {
+          Eigen::Vector3f odom_travel_linear(odom_delta.transform.translation.x, odom_delta.transform.translation.y, odom_delta.transform.translation.z);
+          Eigen::Vector3f odom_twist_linear = odom_travel_linear / odom_time_diff_sec;
+          tf::Quaternion odom_travel_angular(odom_delta.transform.rotation.x, odom_delta.transform.rotation.y, odom_delta.transform.rotation.z, odom_delta.transform.rotation.w);
+          double roll, pitch, yaw;
+          tf::Matrix3x3(odom_travel_angular).getRPY(roll, pitch, yaw);
+          Eigen::Vector3f odom_twist_angular(roll / odom_time_diff_sec, pitch / odom_time_diff_sec, yaw / odom_time_diff_sec);
+          pose_estimator->predict_odom(odom_stamp, odom_twist_linear, odom_twist_angular);
+          odom_stamp_last = odom_stamp;
+        }
       } else {
-        Eigen::Isometry3d delta = tf2::transformToEigen(odom_delta);
-        pose_estimator->predict_odom(delta.cast<float>().matrix());
+        NODELET_WARN_STREAM("failed to look up transform between " << cloud->header.frame_id << " and " << robot_odom_frame_id);
       }
+    } else {
+      // PointClouds-only prediction
+      pose_estimator->predict(stamp);
     }
-
-    // correct
+    // Perform scan matching using the calculated position as the initial value
     double fitness_score;
     auto aligned = pose_estimator->correct(stamp, filtered, &fitness_score);
 
@@ -509,6 +529,8 @@ private:
   ros::NodeHandle mt_nh;
   ros::NodeHandle private_nh;
 
+  bool use_odom;
+  ros::Time odom_stamp_last;
   std::string robot_odom_frame_id;
   std::string odom_child_frame_id;
   bool enable_tf;
