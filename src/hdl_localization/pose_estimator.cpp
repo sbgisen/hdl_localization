@@ -44,8 +44,8 @@ PoseEstimator::PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& registratio
   ukf.reset(new kkl::alg::UnscentedKalmanFilterX<float, PoseSystem>(system, 16, 6, 7, process_noise, measurement_noise, mean, cov));
   // TODO: Change odom covariance constants to ROS params
   // or subscribe an odometry topic and use it's covariance
-  odom_process_noise = Eigen::MatrixXf::Identity(16, 16) * 1e-6;
-  odom_process_noise.middleRows(6, 4) *= 1e-3;
+  odom_process_noise = Eigen::MatrixXf::Identity(16, 16) * 1e-5;
+  odom_process_noise.middleRows(6, 4) *= 1e-2;
 }
 
 PoseEstimator::~PoseEstimator() {}
@@ -106,7 +106,7 @@ void PoseEstimator::predict_odom(const ros::Time& stamp, const Eigen::Vector3f& 
   double dt = (stamp - prev_stamp).toSec();
   prev_stamp = stamp;
 
-  ukf->setProcessNoiseCov(odom_process_noise);
+  ukf->setProcessNoiseCov(odom_process_noise * dt);
   ukf->system.dt = dt;
 
   ukf->predict_odom(odom_twist_linear, odom_twist_angular);
