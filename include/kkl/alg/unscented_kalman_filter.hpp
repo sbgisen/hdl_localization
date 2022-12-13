@@ -170,6 +170,18 @@ public:
     cov = cov_pred;
   }
 
+  void removeNanFromMatrix(MatrixXt& matrix) {
+    int numRows = matrix.rows();
+    int numCols = matrix.cols();
+    for (int r = 0; r < numRows; r++) {
+      for (int c = 0; c < numCols; c++) {
+        if (!std::isfinite(matrix(r, c))) {
+          matrix(r, c) = 0;
+        }
+      }
+    }
+  }
+
   /**
    * @brief correct
    * @param measurement  measurement vector
@@ -210,7 +222,12 @@ public:
       sigma += ext_weights[i] * (diffA * diffB.transpose());
     }
 
-    kalman_gain = sigma * expected_measurement_cov.inverse();
+    MatrixXt expexted_inv = expected_measurement_cov.inverse();
+    if (expexted_inv.hasNaN()) {
+      ROS_WARN_STREAM("[UnscentedKalmanFilter] expexted_inv han Nan\n");
+      removeNanFromMatrix(expexted_inv);
+    }
+    kalman_gain = sigma * expexted_inv;
     const auto& K = kalman_gain;
 
     VectorXt ext_mean = ext_mean_pred + K * (measurement - expected_measurement_mean);
