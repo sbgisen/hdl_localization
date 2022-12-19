@@ -239,7 +239,7 @@ private:
     Eigen::Matrix4f before = pose_estimator->matrix();
 
     if (use_imu) {
-      // IMU-based prediction
+      // PointClouds + IMU prediction
       std::lock_guard<std::mutex> lock(imu_data_mutex);
       auto imu_iter = imu_data.begin();
       for (imu_iter; imu_iter != imu_data.end(); imu_iter++) {
@@ -254,7 +254,7 @@ private:
       }
       imu_data.erase(imu_data.begin(), imu_iter);
     } else if (use_odom) {
-      // Odometry-based prediction
+      // PointClouds + Oodometry prediction
       if (tf_buffer.canTransform(odom_child_frame_id, odom_stamp_last, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0))) {
         // Get the amount of odometry movement since the last calculation
         // Coordinate system where the front of the robot is x
