@@ -70,7 +70,7 @@ public:
 
   /**
    * @brief predict
-   * @param control  input vector
+   * @note state = [px, py, pz, vx, vy, vz, qw, qx, qy, qz, 0, 0, 0, 0, 0, 0]
    */
   void predict() {
     // calculate sigma points
@@ -103,14 +103,16 @@ public:
 
   /**
    * @brief predict
-   * @param control  input vector
+   * @param imu_acc      acceleration
+   * @param imu_gyro     angular velocity
+   * @note state = [px, py, pz, vx, vy, vz, qw, qx, qy, qz, acc_bias_x, acc_bias_y, acc_bias_z, gyro_bias_x, gyro_bias_y, gyro_bias_z]
    */
-  void predict(const VectorXt& control) {
+  void predict_imu(const Eigen::Vector3f& imu_acc, const Eigen::Vector3f& imu_gyro) {
     // calculate sigma points
     ensurePositiveFinite(cov);
     computeSigmaPoints(mean, cov, sigma_points);
     for (int i = 0; i < S; i++) {
-      sigma_points.row(i) = system.f(sigma_points.row(i), control);
+      sigma_points.row(i) = system.f_imu(sigma_points.row(i), imu_acc, imu_gyro);
     }
 
     const auto& R = process_noise;
@@ -130,6 +132,37 @@ public:
     }
     cov_pred += R;
 
+    mean = mean_pred;
+    cov = cov_pred;
+  }
+
+  /**
+   * @brief predict
+   * @param odom_twist_linear Velocity with x axis in front of the robot
+   * @param odom_twist_angular angular velocity
+   * @note state = [px, py, pz, vx, vy, vz, qw, qx, qy, qz, 0, 0, 0, 0, 0, 0]
+   */
+  void predict_odom(Eigen::Vector3f odom_twist_linear, Eigen::Vector3f odom_twist_angular) {
+    // calculate sigma points
+    ensurePositiveFinite(cov);
+    computeSigmaPoints(mean, cov, sigma_points);
+    for (int i = 0; i < S; i++) {
+      sigma_points.row(i) = system.f_odom(sigma_points.row(i), odom_twist_linear, odom_twist_angular);
+    }
+    const auto& R = process_noise;
+    // unscented transform
+    VectorXt mean_pred(mean.size());
+    MatrixXt cov_pred(cov.rows(), cov.cols());
+    mean_pred.setZero();
+    cov_pred.setZero();
+    for (int i = 0; i < S; i++) {
+      mean_pred += weights[i] * sigma_points.row(i);
+    }
+    for (int i = 0; i < S; i++) {
+      VectorXt diff = sigma_points.row(i).transpose() - mean_pred;
+      cov_pred += weights[i] * diff * diff.transpose();
+    }
+    cov_pred += R;
     mean = mean_pred;
     cov = cov_pred;
   }
@@ -174,7 +207,8 @@ public:
       sigma += ext_weights[i] * (diffA * diffB.transpose());
     }
 
-    kalman_gain = sigma * expected_measurement_cov.inverse();
+    MatrixXt expexted_inv = expected_measurement_cov.completeOrthogonalDecomposition().pseudoInverse();
+    kalman_gain = sigma * expexted_inv;
     const auto& K = kalman_gain;
 
     VectorXt ext_mean = ext_mean_pred + K * (measurement - expected_measurement_mean);

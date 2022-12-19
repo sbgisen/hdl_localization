@@ -45,17 +45,20 @@ public:
   void predict(const ros::Time& stamp);
 
   /**
-   * @brief predict
+   * @brief update the state of the IMU-based pose estimation
    * @param stamp    timestamp
-   * @param acc      acceleration
-   * @param gyro     angular velocity
+   * @param imu_acc      acceleration
+   * @param imu_gyro     angular velocity
    */
-  void predict(const ros::Time& stamp, const Eigen::Vector3f& acc, const Eigen::Vector3f& gyro);
+  void predict_imu(const ros::Time& stamp, const Eigen::Vector3f& imu_acc, const Eigen::Vector3f& imu_gyro);
 
   /**
    * @brief update the state of the odomety-based pose estimation
+   * @param stamp    timestamp
+   * @param odom_twist_linear linear velocity
+   * @param odom_twist_angular angular velocity
    */
-  void predict_odom(const Eigen::Matrix4f& odom_delta);
+  void predict_odom(const ros::Time& stamp, const Eigen::Vector3f& odom_twist_linear, const Eigen::Vector3f& odom_twist_angular);
 
   /**
    * @brief correct
@@ -72,10 +75,6 @@ public:
   Eigen::Quaternionf quat() const;
   Eigen::Matrix4f matrix() const;
 
-  Eigen::Vector3f odom_pos() const;
-  Eigen::Quaternionf odom_quat() const;
-  Eigen::Matrix4f odom_matrix() const;
-
   const boost::optional<Eigen::Matrix4f>& wo_prediction_error() const;
   const boost::optional<Eigen::Matrix4f>& imu_prediction_error() const;
   const boost::optional<Eigen::Matrix4f>& odom_prediction_error() const;
@@ -86,9 +85,8 @@ private:
   ros::Time last_correction_stamp;  // when the estimator performed the correction step
   double cool_time_duration;        //
 
-  Eigen::MatrixXf process_noise;
+  Eigen::MatrixXf process_noise, odom_process_noise;
   std::unique_ptr<kkl::alg::UnscentedKalmanFilterX<float, PoseSystem>> ukf;
-  std::unique_ptr<kkl::alg::UnscentedKalmanFilterX<float, OdomSystem>> odom_ukf;
 
   Eigen::Matrix4f last_observation;
   boost::optional<Eigen::Matrix4f> wo_pred_error;
