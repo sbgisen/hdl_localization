@@ -147,9 +147,6 @@ public:
     ensurePositiveFinite(cov);
     computeSigmaPoints(mean, cov, sigma_points);
     for (int i = 0; i < S; i++) {
-      Eigen::Quaternionf current_orientation(sigma_points(i, 6), sigma_points(i, 7), sigma_points(i, 8), sigma_points(i, 9));
-      Eigen::Vector3f odom_vel = current_orientation * odom_twist_linear;
-      Eigen::Vector3f odom_angular_vel = current_orientation * odom_twist_angular;
       sigma_points.row(i) = system.f_odom(sigma_points.row(i), odom_twist_linear, odom_twist_angular);
     }
     const auto& R = process_noise;
