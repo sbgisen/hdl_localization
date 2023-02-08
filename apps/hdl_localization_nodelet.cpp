@@ -193,12 +193,12 @@ private:
   void points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg) {
     std::lock_guard<std::mutex> estimator_lock(pose_estimator_mutex);
     if (!pose_estimator) {
-      NODELET_ERROR("waiting for initial pose input!!");
+      NODELET_ERROR_THROTTLE(1.0, "waiting for initial pose input!!");
       return;
     }
 
     if (!globalmap) {
-      NODELET_ERROR("globalmap has not been received!!");
+      NODELET_ERROR_THROTTLE(1.0, "globalmap has not been received!!");
       return;
     }
 
