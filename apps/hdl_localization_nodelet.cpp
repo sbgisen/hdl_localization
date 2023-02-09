@@ -293,7 +293,7 @@ private:
     }
     // Perform scan matching using the calculated position as the initial value
     double fitness_score;
-    auto aligned = pose_estimator->correct(stamp, filtered, &fitness_score);
+    auto aligned = pose_estimator->correct(stamp, filtered, fitness_score);
 
     if (aligned_pub.getNumSubscribers()) {
       aligned->header.frame_id = "map";
