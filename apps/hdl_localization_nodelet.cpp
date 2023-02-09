@@ -193,12 +193,12 @@ private:
   void points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg) {
     std::lock_guard<std::mutex> estimator_lock(pose_estimator_mutex);
     if (!pose_estimator) {
-      NODELET_ERROR("waiting for initial pose input!!");
+      NODELET_ERROR_THROTTLE(1.0, "waiting for initial pose input!!");
       return;
     }
 
     if (!globalmap) {
-      NODELET_ERROR("globalmap has not been received!!");
+      NODELET_ERROR_THROTTLE(1.0, "globalmap has not been received!!");
       return;
     }
 
@@ -260,13 +260,13 @@ private:
         // Coordinate system where the front of the robot is x
         geometry_msgs::TransformStamped odom_delta =
           tf_buffer.lookupTransform(odom_child_frame_id, odom_stamp_last, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0));
-        // Get the latest TF to get the time
-        geometry_msgs::TransformStamped odom_latest = tf_buffer.lookupTransform(odom_child_frame_id, odom_child_frame_id, ros::Time(0));
-        ros::Time odom_stamp = odom_latest.header.stamp;
+        // Get the latest odom_child_frame_id to get the time
+        geometry_msgs::TransformStamped odom_now = tf_buffer.lookupTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0));
+        ros::Time odom_stamp = odom_now.header.stamp;
         ros::Duration odom_time_diff = odom_stamp - odom_stamp_last;
         double odom_time_diff_sec = odom_time_diff.toSec();
         if (odom_delta.header.stamp.isZero() || odom_time_diff_sec <= 0) {
-          NODELET_WARN_STREAM("failed to look up transform between " << cloud->header.frame_id << " and " << robot_odom_frame_id);
+          NODELET_WARN_STREAM("Wrong timestamp detected: odom_time_diff_sec = " << odom_time_diff_sec);
         } else {
           Eigen::Vector3f odom_travel_linear(odom_delta.transform.translation.x, odom_delta.transform.translation.y, odom_delta.transform.translation.z);
           Eigen::Vector3f odom_twist_linear = odom_travel_linear / odom_time_diff_sec;
@@ -275,10 +275,17 @@ private:
           tf::Matrix3x3(odom_travel_angular).getRPY(roll, pitch, yaw);
           Eigen::Vector3f odom_twist_angular(roll / odom_time_diff_sec, pitch / odom_time_diff_sec, yaw / odom_time_diff_sec);
           pose_estimator->predict_odom(odom_stamp, odom_twist_linear, odom_twist_angular);
-          odom_stamp_last = odom_stamp;
         }
+        odom_stamp_last = odom_stamp;
       } else {
-        NODELET_WARN_STREAM("failed to look up transform between " << cloud->header.frame_id << " and " << robot_odom_frame_id);
+        if (tf_buffer.canTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0))) {
+          NODELET_WARN_STREAM("The last timestamp is wrong, skip localization");
+          // Get the latest odom_child_frame_id to get the time
+          geometry_msgs::TransformStamped odom_now = tf_buffer.lookupTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0));
+          odom_stamp_last = odom_now.header.stamp;
+        } else {
+          NODELET_WARN_STREAM("Failed to look up transform between " << cloud->header.frame_id << " and " << robot_odom_frame_id);
+        }
       }
     } else {
       // PointClouds-only prediction
