@@ -260,8 +260,8 @@ private:
         // Coordinate system where the front of the robot is x
         geometry_msgs::TransformStamped odom_delta =
           tf_buffer.lookupTransform(odom_child_frame_id, odom_stamp_last, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0));
-        // Get the latest TF to get the time
-        geometry_msgs::TransformStamped odom_now = tf_buffer.lookupTransform(odom_child_frame_id, odom_child_frame_id, ros::Time(0));
+        // Get the latest odom_child_frame_id to get the time
+        geometry_msgs::TransformStamped odom_now = tf_buffer.lookupTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0));
         ros::Time odom_stamp = odom_now.header.stamp;
         ros::Duration odom_time_diff = odom_stamp - odom_stamp_last;
         double odom_time_diff_sec = odom_time_diff.toSec();
@@ -280,7 +280,8 @@ private:
       } else {
         if (tf_buffer.canTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0))) {
           NODELET_WARN_STREAM("The last timestamp is wrong, skip localization");
-          geometry_msgs::TransformStamped odom_now = tf_buffer.lookupTransform(odom_child_frame_id, odom_child_frame_id, ros::Time(0));
+          // Get the latest odom_child_frame_id to get the time
+          geometry_msgs::TransformStamped odom_now = tf_buffer.lookupTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0));
           odom_stamp_last = odom_now.header.stamp;
         } else {
           NODELET_WARN_STREAM("Failed to look up transform between " << cloud->header.frame_id << " and " << robot_odom_frame_id);
