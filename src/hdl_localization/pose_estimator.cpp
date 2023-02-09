@@ -9,13 +9,12 @@ namespace hdl_localization {
 /**
  * @brief constructor
  * @param registration        registration method
- * @param stamp               timestamp
  * @param pos                 initial position
  * @param quat                initial orientation
  * @param cool_time_duration  during "cool time", prediction is not performed
  */
-PoseEstimator::PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& registration, const ros::Time& stamp, const Eigen::Vector3f& pos, const Eigen::Quaternionf& quat, double cool_time_duration)
-    : init_stamp(stamp), registration(registration), cool_time_duration(cool_time_duration) {
+PoseEstimator::PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& registration, const Eigen::Vector3f& pos, const Eigen::Quaternionf& quat, double cool_time_duration)
+    : registration(registration), cool_time_duration(cool_time_duration) {
   last_observation = Eigen::Matrix4f::Identity();
   last_observation.block<3, 3>(0, 0) = quat.toRotationMatrix();
   last_observation.block<3, 1>(0, 3) = pos;
@@ -34,7 +33,7 @@ PoseEstimator::PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& registratio
   Eigen::VectorXf mean(16);
   mean.middleRows(0, 3) = pos;
   mean.middleRows(3, 3).setZero();
-  mean.middleRows(6, 4) = Eigen::Vector4f(quat.w(), quat.x(), quat.y(), quat.z());
+  mean.middleRows(6, 4) = Eigen::Vector4f(quat.w(), quat.x(), quat.y(), quat.z()).normalized();
   mean.middleRows(10, 3).setZero();
   mean.middleRows(13, 3).setZero();
 
@@ -57,6 +56,10 @@ PoseEstimator::~PoseEstimator() {}
  * @param gyro     angular velocity
  */
 void PoseEstimator::predict(const ros::Time& stamp) {
+  if (init_stamp.is_zero()) {
+    init_stamp = stamp;
+  }
+
   if ((stamp - init_stamp).toSec() < cool_time_duration || prev_stamp.is_zero() || prev_stamp == stamp) {
     prev_stamp = stamp;
     return;
@@ -78,6 +81,10 @@ void PoseEstimator::predict(const ros::Time& stamp) {
  * @param imu_gyro     angular velocity
  */
 void PoseEstimator::predict_imu(const ros::Time& stamp, const Eigen::Vector3f& imu_acc, const Eigen::Vector3f& imu_gyro) {
+  if (init_stamp.is_zero()) {
+    init_stamp = stamp;
+  }
+
   if ((stamp - init_stamp).toSec() < cool_time_duration || prev_stamp.is_zero() || prev_stamp == stamp) {
     prev_stamp = stamp;
     return;
@@ -118,6 +125,10 @@ void PoseEstimator::predict_odom(const ros::Time& stamp, const Eigen::Vector3f& 
  * @return cloud aligned to the globalmap
  */
 pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Time& stamp, const pcl::PointCloud<PointT>::ConstPtr& cloud, double& fitness_score) {
+  if (init_stamp.is_zero()) {
+    init_stamp = stamp;
+  }
+
   last_correction_stamp = stamp;
 
   Eigen::Matrix4f no_guess = last_observation;
