@@ -1,3 +1,5 @@
+#define PCL_NO_PRECOMPILE
+
 #include <mutex>
 #include <memory>
 #include <iostream>
@@ -14,11 +16,23 @@
 
 #include <pcl/filters/voxel_grid.h>
 
+struct EIGEN_ALIGN16 PointXYZRGBI
+{
+  PCL_ADD_POINT4D
+  PCL_ADD_RGB;
+  PCL_ADD_INTENSITY;
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+};
+POINT_CLOUD_REGISTER_POINT_STRUCT(PointXYZRGBI, 
+                                  (float, x, x)(float, y, y)(float, z, z)
+                                  (float, rgb, rgb)
+                                  (float, intensity, intensity))
+
 namespace hdl_localization {
 
 class GlobalmapServerNodelet : public nodelet::Nodelet {
 public:
-  using PointT = pcl::PointXYZI;
+  using PointT = PointXYZRGBI;
 
   GlobalmapServerNodelet() {
   }
