@@ -1,3 +1,5 @@
+#define PCL_NO_PRECOMPILE
+
 #include <mutex>
 #include <memory>
 #include <iostream>
