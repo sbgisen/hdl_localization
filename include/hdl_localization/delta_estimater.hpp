@@ -7,12 +7,11 @@
 #include <pcl/registration/registration.h>
 
 namespace hdl_localization {
-
 class DeltaEstimater {
 public:
   using PointT = pcl::PointXYZI;
 
-  DeltaEstimater(pcl::Registration<PointT, PointT>::Ptr reg): delta(Eigen::Isometry3f::Identity()), reg(reg) {}
+  DeltaEstimater(pcl::Registration<PointT, PointT>::Ptr reg) : delta(Eigen::Isometry3f::Identity()), reg(reg) {}
   ~DeltaEstimater() {}
 
   void reset() {
@@ -53,7 +52,6 @@ private:
   pcl::PointCloud<PointT>::ConstPtr last_frame;
 };
 
-} // namespace hdl_localization
-
+}  // namespace hdl_localization
 
 #endif

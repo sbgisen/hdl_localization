@@ -26,21 +26,16 @@ public:
    * @brief constructor
    * @param system               system to be estimated
    * @param state_dim            state vector dimension
-   * @param input_dim            input vector dimension
    * @param measurement_dim      measurement vector dimension
    * @param process_noise        process noise covariance (state_dim x state_dim)
    * @param measurement_noise    measurement noise covariance (measurement_dim x measuremend_dim)
    * @param mean                 initial mean
    * @param cov                  initial covariance
    */
-  UnscentedKalmanFilterX(const System& system, int state_dim, int input_dim, int measurement_dim, const MatrixXt& process_noise, const MatrixXt& measurement_noise, const VectorXt& mean, const MatrixXt& cov)
+  UnscentedKalmanFilterX(const System& system, int state_dim, int measurement_dim, const MatrixXt& process_noise, const MatrixXt& measurement_noise, const VectorXt& mean, const MatrixXt& cov)
     : state_dim(state_dim),
-    input_dim(input_dim),
     measurement_dim(measurement_dim),
-    N(state_dim),
-    M(input_dim),
-    K(measurement_dim),
-    S(2 * state_dim + 1),
+    sigma_points_samples(2 * state_dim + 1),
     mean(mean),
     cov(cov),
     system(system),
@@ -49,22 +44,20 @@ public:
     lambda(1),
     normal_dist(0.0, 1.0)
   {
-    weights.resize(S, 1);
-    sigma_points.resize(S, N);
-    ext_weights.resize(2 * (N + K) + 1, 1);
-    ext_sigma_points.resize(2 * (N + K) + 1, N + K);
-    expected_measurements.resize(2 * (N + K) + 1, K);
-
+    weights.resize(sigma_points_samples, 1);
+    sigma_points.resize(sigma_points_samples, state_dim);
+    ext_weights.resize(2 * (state_dim + measurement_dim) + 1, 1);
+    ext_sigma_points.resize(2 * (state_dim + measurement_dim) + 1, state_dim + measurement_dim);
+    expected_measurements.resize(2 * (state_dim + measurement_dim) + 1, measurement_dim);
     // initialize weights for unscented filter
-    weights[0] = lambda / (N + lambda);
-    for (int i = 1; i < 2 * N + 1; i++) {
-      weights[i] = 1 / (2 * (N + lambda));
+    weights[0] = lambda / (state_dim + lambda);
+    for (int i = 1; i < 2 * state_dim + 1; i++) {
+      weights[i] = 1 / (2 * (state_dim + lambda));
     }
-
     // weights for extended state space which includes error variances
-    ext_weights[0] = lambda / (N + K + lambda);
-    for (int i = 1; i < 2 * (N + K) + 1; i++) {
-      ext_weights[i] = 1 / (2 * (N + K + lambda));
+    ext_weights[0] = lambda / (state_dim + measurement_dim + lambda);
+    for (int i = 1; i < 2 * (state_dim + measurement_dim) + 1; i++) {
+      ext_weights[i] = 1 / (2 * (state_dim + measurement_dim + lambda));
     }
   }
 
@@ -76,7 +69,7 @@ public:
     // calculate sigma points
     ensurePositiveFinite(cov);
     computeSigmaPoints(mean, cov, sigma_points);
-    for (int i = 0; i < S; i++) {
+    for (int i = 0; i < sigma_points_samples; i++) {
       sigma_points.row(i) = system.f(sigma_points.row(i));
     }
 
@@ -88,15 +81,14 @@ public:
 
     mean_pred.setZero();
     cov_pred.setZero();
-    for (int i = 0; i < S; i++) {
+    for (int i = 0; i < sigma_points_samples; i++) {
       mean_pred += weights[i] * sigma_points.row(i);
     }
-    for (int i = 0; i < S; i++) {
+    for (int i = 0; i < sigma_points_samples; i++) {
       VectorXt diff = sigma_points.row(i).transpose() - mean_pred;
       cov_pred += weights[i] * diff * diff.transpose();
     }
     cov_pred += R;
-
     mean = mean_pred;
     cov = cov_pred;
   }
@@ -111,7 +103,7 @@ public:
     // calculate sigma points
     ensurePositiveFinite(cov);
     computeSigmaPoints(mean, cov, sigma_points);
-    for (int i = 0; i < S; i++) {
+    for (int i = 0; i < sigma_points_samples; i++) {
       sigma_points.row(i) = system.f_imu(sigma_points.row(i), imu_acc, imu_gyro);
     }
 
@@ -123,15 +115,14 @@ public:
 
     mean_pred.setZero();
     cov_pred.setZero();
-    for (int i = 0; i < S; i++) {
+    for (int i = 0; i < sigma_points_samples; i++) {
       mean_pred += weights[i] * sigma_points.row(i);
     }
-    for (int i = 0; i < S; i++) {
+    for (int i = 0; i < sigma_points_samples; i++) {
       VectorXt diff = sigma_points.row(i).transpose() - mean_pred;
       cov_pred += weights[i] * diff * diff.transpose();
     }
     cov_pred += R;
-
     mean = mean_pred;
     cov = cov_pred;
   }
@@ -146,7 +137,7 @@ public:
     // calculate sigma points
     ensurePositiveFinite(cov);
     computeSigmaPoints(mean, cov, sigma_points);
-    for (int i = 0; i < S; i++) {
+    for (int i = 0; i < sigma_points_samples; i++) {
       sigma_points.row(i) = system.f_odom(sigma_points.row(i), odom_twist_linear, odom_twist_angular);
     }
     const auto& R = process_noise;
@@ -155,10 +146,10 @@ public:
     MatrixXt cov_pred(cov.rows(), cov.cols());
     mean_pred.setZero();
     cov_pred.setZero();
-    for (int i = 0; i < S; i++) {
+    for (int i = 0; i < sigma_points_samples; i++) {
       mean_pred += weights[i] * sigma_points.row(i);
     }
-    for (int i = 0; i < S; i++) {
+    for (int i = 0; i < sigma_points_samples; i++) {
       VectorXt diff = sigma_points.row(i).transpose() - mean_pred;
       cov_pred += weights[i] * diff * diff.transpose();
     }
@@ -173,11 +164,11 @@ public:
    */
   void correct(const VectorXt& measurement) {
     // create extended state space which includes error variances
-    VectorXt ext_mean_pred = VectorXt::Zero(N + K, 1);
-    MatrixXt ext_cov_pred = MatrixXt::Zero(N + K, N + K);
-    ext_mean_pred.topLeftCorner(N, 1) = VectorXt(mean);
-    ext_cov_pred.topLeftCorner(N, N) = MatrixXt(cov);
-    ext_cov_pred.bottomRightCorner(K, K) = measurement_noise;
+    VectorXt ext_mean_pred = VectorXt::Zero(state_dim + measurement_dim, 1);
+    MatrixXt ext_cov_pred = MatrixXt::Zero(state_dim + measurement_dim, state_dim + measurement_dim);
+    ext_mean_pred.topLeftCorner(state_dim, 1) = VectorXt(mean);
+    ext_cov_pred.topLeftCorner(state_dim, state_dim) = MatrixXt(cov);
+    ext_cov_pred.bottomRightCorner(measurement_dim, measurement_dim) = measurement_noise;
 
     ensurePositiveFinite(ext_cov_pred);
     computeSigmaPoints(ext_mean_pred, ext_cov_pred, ext_sigma_points);
@@ -185,22 +176,21 @@ public:
     // unscented transform
     expected_measurements.setZero();
     for (int i = 0; i < ext_sigma_points.rows(); i++) {
-      expected_measurements.row(i) = system.h(ext_sigma_points.row(i).transpose().topLeftCorner(N, 1));
-      expected_measurements.row(i) += VectorXt(ext_sigma_points.row(i).transpose().bottomRightCorner(K, 1));
+      expected_measurements.row(i) = system.h(ext_sigma_points.row(i).transpose().topLeftCorner(state_dim, 1));
+      expected_measurements.row(i) += VectorXt(ext_sigma_points.row(i).transpose().bottomRightCorner(measurement_dim, 1));
     }
-
-    VectorXt expected_measurement_mean = VectorXt::Zero(K);
+    VectorXt expected_measurement_mean = VectorXt::Zero(measurement_dim);
     for (int i = 0; i < ext_sigma_points.rows(); i++) {
       expected_measurement_mean += ext_weights[i] * expected_measurements.row(i);
     }
-    MatrixXt expected_measurement_cov = MatrixXt::Zero(K, K);
+    MatrixXt expected_measurement_cov = MatrixXt::Zero(measurement_dim, measurement_dim);
     for (int i = 0; i < ext_sigma_points.rows(); i++) {
       VectorXt diff = expected_measurements.row(i).transpose() - expected_measurement_mean;
       expected_measurement_cov += ext_weights[i] * diff * diff.transpose();
     }
 
     // calculated transformed covariance
-    MatrixXt sigma = MatrixXt::Zero(N + K, K);
+    MatrixXt sigma = MatrixXt::Zero(state_dim + measurement_dim, measurement_dim);
     for (int i = 0; i < ext_sigma_points.rows(); i++) {
       auto diffA = (ext_sigma_points.row(i).transpose() - ext_mean_pred);
       auto diffB = (expected_measurements.row(i).transpose() - expected_measurement_mean);
@@ -214,8 +204,8 @@ public:
     VectorXt ext_mean = ext_mean_pred + K * (measurement - expected_measurement_mean);
     MatrixXt ext_cov = ext_cov_pred - K * expected_measurement_cov * K.transpose();
 
-    mean = ext_mean.topLeftCorner(N, 1);
-    cov = ext_cov.topLeftCorner(N, N);
+    mean = ext_mean.topLeftCorner(state_dim, 1);
+    cov = ext_cov.topLeftCorner(state_dim, state_dim);
   }
 
   /*			getter			*/
@@ -240,13 +230,8 @@ public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 private:
   const int state_dim;
-  const int input_dim;
   const int measurement_dim;
-
-  const int N;
-  const int M;
-  const int K;
-  const int S;
+  const int sigma_points_samples;
 
 public:
   VectorXt mean;
