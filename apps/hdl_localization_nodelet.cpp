@@ -148,9 +148,15 @@ private:
   void initialize_params() {
     // intialize scan matching method
     double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.1);
-    boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
-    voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
-    downsample_filter = voxelgrid;
+    if (downsample_resolution > 0.0) {
+      boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
+      voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
+      downsample_filter = voxelgrid;
+    }else{
+      ROS_WARN("Input downsample_filter is disabled");
+      downsample_filter.reset();
+    }
+
 
     NODELET_INFO("create registration method for localization");
     registration = create_registration();
