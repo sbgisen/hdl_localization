@@ -16,10 +16,9 @@ public:
   typedef Eigen::Matrix<T, 4, 4> Matrix4t;
   typedef Eigen::Matrix<T, Eigen::Dynamic, 1> VectorXt;
   typedef Eigen::Quaternion<T> Quaterniont;
+
 public:
-  PoseSystem() {
-    dt = 0.01;
-  }
+  PoseSystem() { dt = 0.01; }
 
   // system equation (without input)
   VectorXt f(const VectorXt& state) const {
@@ -70,7 +69,7 @@ public:
     Vector3t acc = qt * (imu_acc - acc_bias - g);
     Vector3t next_vt = vt + acc * dt;
     next_vt.z() = 0.0f;
-    next_state.middleRows(3, 3) = next_vt; // acceleration didn't contribute to accuracy due to large noise
+    next_state.middleRows(3, 3) = next_vt;  // acceleration didn't contribute to accuracy due to large noise
 
     // orientation
     Vector3t gyro = imu_gyro - gyro_bias;
@@ -126,6 +125,6 @@ public:
   double dt;
 };
 
-}
+}  // namespace hdl_localization
 
-#endif // POSE_SYSTEM_HPP
+#endif  // POSE_SYSTEM_HPP

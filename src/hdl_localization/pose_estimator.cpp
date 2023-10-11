@@ -32,7 +32,6 @@ PoseEstimator::PoseEstimator(
   angular_correction_gain(angular_correction_gain),
   angular_correction_distance_reject(angular_correction_distance_reject),
   angular_correction_distance_reliable(angular_correction_distance_reliable) {
-
   // Initialize initial pose
   Eigen::Matrix4f initial_pose = Eigen::Matrix4f::Identity();
   initial_pose.block<3, 1>(0, 3) = initial_position;
