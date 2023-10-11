@@ -41,30 +41,30 @@ public:
     const MatrixXt& measurement_noise,
     const VectorXt& mean,
     const MatrixXt& cov)
-  : state_dim(state_dim),
-    measurement_dim(measurement_dim),
-    sigma_points_samples(2 * state_dim + 1),
-    mean(mean),
-    cov(cov),
-    system(system),
-    process_noise(process_noise),
-    measurement_noise(measurement_noise),
-    lambda(1),
-    normal_dist(0.0, 1.0) {
-    weights.resize(sigma_points_samples, 1);
-    sigma_points.resize(sigma_points_samples, state_dim);
-    ext_weights.resize(2 * (state_dim + measurement_dim) + 1, 1);
-    ext_sigma_points.resize(2 * (state_dim + measurement_dim) + 1, state_dim + measurement_dim);
-    expected_measurements.resize(2 * (state_dim + measurement_dim) + 1, measurement_dim);
+  : state_dim_(state_dim),
+    measurement_dim_(measurement_dim),
+    sigma_points_samples_(2 * state_dim + 1),
+    mean_(mean),
+    cov_(cov),
+    system_(system),
+    process_noise_(process_noise),
+    measurement_noise_(measurement_noise),
+    lambda_(1),
+    normal_dist_(0.0, 1.0) {
+    weights_.resize(sigma_points_samples_, 1);
+    sigma_points_.resize(sigma_points_samples_, state_dim);
+    ext_weights_.resize(2 * (state_dim + measurement_dim) + 1, 1);
+    ext_sigma_points_.resize(2 * (state_dim + measurement_dim) + 1, state_dim + measurement_dim);
+    expected_measurements_.resize(2 * (state_dim + measurement_dim) + 1, measurement_dim);
     // initialize weights for unscented filter
-    weights[0] = lambda / (state_dim + lambda);
+    weights_[0] = lambda_ / (state_dim + lambda_);
     for (int i = 1; i < 2 * state_dim + 1; i++) {
-      weights[i] = 1 / (2 * (state_dim + lambda));
+      weights_[i] = 1 / (2 * (state_dim + lambda_));
     }
     // weights for extended state space which includes error variances
-    ext_weights[0] = lambda / (state_dim + measurement_dim + lambda);
+    ext_weights_[0] = lambda_ / (state_dim + measurement_dim + lambda_);
     for (int i = 1; i < 2 * (state_dim + measurement_dim) + 1; i++) {
-      ext_weights[i] = 1 / (2 * (state_dim + measurement_dim + lambda));
+      ext_weights_[i] = 1 / (2 * (state_dim + measurement_dim + lambda_));
     }
   }
 
@@ -74,30 +74,30 @@ public:
    */
   void predict() {
     // calculate sigma points
-    ensurePositiveFinite(cov);
-    computeSigmaPoints(mean, cov, sigma_points);
-    for (int i = 0; i < sigma_points_samples; i++) {
-      sigma_points.row(i) = system.f(sigma_points.row(i));
+    ensurePositiveFinite(cov_);
+    computeSigmaPoints(mean_, cov_, sigma_points_);
+    for (int i = 0; i < sigma_points_samples_; i++) {
+      sigma_points_.row(i) = system_.f(sigma_points_.row(i));
     }
 
-    const auto& R = process_noise;
+    const auto& r = process_noise_;
 
     // unscented transform
-    VectorXt mean_pred(mean.size());
-    MatrixXt cov_pred(cov.rows(), cov.cols());
+    VectorXt mean_pred(mean_.size());
+    MatrixXt cov_pred(cov_.rows(), cov_.cols());
 
     mean_pred.setZero();
     cov_pred.setZero();
-    for (int i = 0; i < sigma_points_samples; i++) {
-      mean_pred += weights[i] * sigma_points.row(i);
+    for (int i = 0; i < sigma_points_samples_; i++) {
+      mean_pred += weights_[i] * sigma_points_.row(i);
     }
-    for (int i = 0; i < sigma_points_samples; i++) {
-      VectorXt diff = sigma_points.row(i).transpose() - mean_pred;
-      cov_pred += weights[i] * diff * diff.transpose();
+    for (int i = 0; i < sigma_points_samples_; i++) {
+      VectorXt diff = sigma_points_.row(i).transpose() - mean_pred;
+      cov_pred += weights_[i] * diff * diff.transpose();
     }
-    cov_pred += R;
-    mean = mean_pred;
-    cov = cov_pred;
+    cov_pred += r;
+    mean_ = mean_pred;
+    cov_ = cov_pred;
   }
 
   /**
@@ -106,32 +106,32 @@ public:
    * @param imu_gyro     angular velocity
    * @note state = [px, py, pz, vx, vy, vz, qw, qx, qy, qz, acc_bias_x, acc_bias_y, acc_bias_z, gyro_bias_x, gyro_bias_y, gyro_bias_z]
    */
-  void predict_imu(const Eigen::Vector3f& imu_acc, const Eigen::Vector3f& imu_gyro) {
+  void predictImu(const Eigen::Vector3f& imu_acc, const Eigen::Vector3f& imu_gyro) {
     // calculate sigma points
-    ensurePositiveFinite(cov);
-    computeSigmaPoints(mean, cov, sigma_points);
-    for (int i = 0; i < sigma_points_samples; i++) {
-      sigma_points.row(i) = system.f_imu(sigma_points.row(i), imu_acc, imu_gyro);
+    ensurePositiveFinite(cov_);
+    computeSigmaPoints(mean_, cov_, sigma_points_);
+    for (int i = 0; i < sigma_points_samples_; i++) {
+      sigma_points_.row(i) = system_.fImu(sigma_points_.row(i), imu_acc, imu_gyro);
     }
 
-    const auto& R = process_noise;
+    const auto& r = process_noise_;
 
     // unscented transform
-    VectorXt mean_pred(mean.size());
-    MatrixXt cov_pred(cov.rows(), cov.cols());
+    VectorXt mean_pred(mean_.size());
+    MatrixXt cov_pred(cov_.rows(), cov_.cols());
 
     mean_pred.setZero();
     cov_pred.setZero();
-    for (int i = 0; i < sigma_points_samples; i++) {
-      mean_pred += weights[i] * sigma_points.row(i);
+    for (int i = 0; i < sigma_points_samples_; i++) {
+      mean_pred += weights_[i] * sigma_points_.row(i);
     }
-    for (int i = 0; i < sigma_points_samples; i++) {
-      VectorXt diff = sigma_points.row(i).transpose() - mean_pred;
-      cov_pred += weights[i] * diff * diff.transpose();
+    for (int i = 0; i < sigma_points_samples_; i++) {
+      VectorXt diff = sigma_points_.row(i).transpose() - mean_pred;
+      cov_pred += weights_[i] * diff * diff.transpose();
     }
-    cov_pred += R;
-    mean = mean_pred;
-    cov = cov_pred;
+    cov_pred += r;
+    mean_ = mean_pred;
+    cov_ = cov_pred;
   }
 
   /**
@@ -140,29 +140,29 @@ public:
    * @param odom_twist_angular angular velocity
    * @note state = [px, py, pz, vx, vy, vz, qw, qx, qy, qz, 0, 0, 0, 0, 0, 0]
    */
-  void predict_odom(Eigen::Vector3f odom_twist_linear, Eigen::Vector3f odom_twist_angular) {
+  void predictOdom(const Eigen::Vector3f& odom_twist_linear, const Eigen::Vector3f& odom_twist_angular) {
     // calculate sigma points
-    ensurePositiveFinite(cov);
-    computeSigmaPoints(mean, cov, sigma_points);
-    for (int i = 0; i < sigma_points_samples; i++) {
-      sigma_points.row(i) = system.f_odom(sigma_points.row(i), odom_twist_linear, odom_twist_angular);
+    ensurePositiveFinite(cov_);
+    computeSigmaPoints(mean_, cov_, sigma_points_);
+    for (int i = 0; i < sigma_points_samples_; i++) {
+      sigma_points_.row(i) = system_.fOdom(sigma_points_.row(i), odom_twist_linear, odom_twist_angular);
     }
-    const auto& R = process_noise;
+    const auto& r = process_noise_;
     // unscented transform
-    VectorXt mean_pred(mean.size());
-    MatrixXt cov_pred(cov.rows(), cov.cols());
+    VectorXt mean_pred(mean_.size());
+    MatrixXt cov_pred(cov_.rows(), cov_.cols());
     mean_pred.setZero();
     cov_pred.setZero();
-    for (int i = 0; i < sigma_points_samples; i++) {
-      mean_pred += weights[i] * sigma_points.row(i);
+    for (int i = 0; i < sigma_points_samples_; i++) {
+      mean_pred += weights_[i] * sigma_points_.row(i);
     }
-    for (int i = 0; i < sigma_points_samples; i++) {
-      VectorXt diff = sigma_points.row(i).transpose() - mean_pred;
-      cov_pred += weights[i] * diff * diff.transpose();
+    for (int i = 0; i < sigma_points_samples_; i++) {
+      VectorXt diff = sigma_points_.row(i).transpose() - mean_pred;
+      cov_pred += weights_[i] * diff * diff.transpose();
     }
-    cov_pred += R;
-    mean = mean_pred;
-    cov = cov_pred;
+    cov_pred += r;
+    mean_ = mean_pred;
+    cov_ = cov_pred;
   }
 
   /**
@@ -171,123 +171,123 @@ public:
    */
   void correct(const VectorXt& measurement) {
     // create extended state space which includes error variances
-    VectorXt ext_mean_pred = VectorXt::Zero(state_dim + measurement_dim, 1);
-    MatrixXt ext_cov_pred = MatrixXt::Zero(state_dim + measurement_dim, state_dim + measurement_dim);
-    ext_mean_pred.topLeftCorner(state_dim, 1) = VectorXt(mean);
-    ext_cov_pred.topLeftCorner(state_dim, state_dim) = MatrixXt(cov);
-    ext_cov_pred.bottomRightCorner(measurement_dim, measurement_dim) = measurement_noise;
+    VectorXt ext_mean_pred = VectorXt::Zero(state_dim_ + measurement_dim_, 1);
+    MatrixXt ext_cov_pred = MatrixXt::Zero(state_dim_ + measurement_dim_, state_dim_ + measurement_dim_);
+    ext_mean_pred.topLeftCorner(state_dim_, 1) = VectorXt(mean_);
+    ext_cov_pred.topLeftCorner(state_dim_, state_dim_) = MatrixXt(cov_);
+    ext_cov_pred.bottomRightCorner(measurement_dim_, measurement_dim_) = measurement_noise_;
 
     ensurePositiveFinite(ext_cov_pred);
-    computeSigmaPoints(ext_mean_pred, ext_cov_pred, ext_sigma_points);
+    computeSigmaPoints(ext_mean_pred, ext_cov_pred, ext_sigma_points_);
 
     // unscented transform
-    expected_measurements.setZero();
-    for (int i = 0; i < ext_sigma_points.rows(); i++) {
-      expected_measurements.row(i) = system.h(ext_sigma_points.row(i).transpose().topLeftCorner(state_dim, 1));
-      expected_measurements.row(i) += VectorXt(ext_sigma_points.row(i).transpose().bottomRightCorner(measurement_dim, 1));
+    expected_measurements_.setZero();
+    for (int i = 0; i < ext_sigma_points_.rows(); i++) {
+      expected_measurements_.row(i) = system_.h(ext_sigma_points_.row(i).transpose().topLeftCorner(state_dim_, 1));
+      expected_measurements_.row(i) += VectorXt(ext_sigma_points_.row(i).transpose().bottomRightCorner(measurement_dim_, 1));
     }
-    VectorXt expected_measurement_mean = VectorXt::Zero(measurement_dim);
-    for (int i = 0; i < ext_sigma_points.rows(); i++) {
-      expected_measurement_mean += ext_weights[i] * expected_measurements.row(i);
+    VectorXt expected_measurement_mean = VectorXt::Zero(measurement_dim_);
+    for (int i = 0; i < ext_sigma_points_.rows(); i++) {
+      expected_measurement_mean += ext_weights_[i] * expected_measurements_.row(i);
     }
-    MatrixXt expected_measurement_cov = MatrixXt::Zero(measurement_dim, measurement_dim);
-    for (int i = 0; i < ext_sigma_points.rows(); i++) {
-      VectorXt diff = expected_measurements.row(i).transpose() - expected_measurement_mean;
-      expected_measurement_cov += ext_weights[i] * diff * diff.transpose();
+    MatrixXt expected_measurement_cov = MatrixXt::Zero(measurement_dim_, measurement_dim_);
+    for (int i = 0; i < ext_sigma_points_.rows(); i++) {
+      VectorXt diff = expected_measurements_.row(i).transpose() - expected_measurement_mean;
+      expected_measurement_cov += ext_weights_[i] * diff * diff.transpose();
     }
 
     // calculated transformed covariance
-    MatrixXt sigma = MatrixXt::Zero(state_dim + measurement_dim, measurement_dim);
-    for (int i = 0; i < ext_sigma_points.rows(); i++) {
-      auto diffA = (ext_sigma_points.row(i).transpose() - ext_mean_pred);
-      auto diffB = (expected_measurements.row(i).transpose() - expected_measurement_mean);
-      sigma += ext_weights[i] * (diffA * diffB.transpose());
+    MatrixXt sigma = MatrixXt::Zero(state_dim_ + measurement_dim_, measurement_dim_);
+    for (int i = 0; i < ext_sigma_points_.rows(); i++) {
+      auto diff_a = (ext_sigma_points_.row(i).transpose() - ext_mean_pred);
+      auto diff_b = (expected_measurements_.row(i).transpose() - expected_measurement_mean);
+      sigma += ext_weights_[i] * (diff_a * diff_b.transpose());
     }
 
     MatrixXt expexted_inv = expected_measurement_cov.completeOrthogonalDecomposition().pseudoInverse();
-    kalman_gain = sigma * expexted_inv;
-    const auto& K = kalman_gain;
+    kalman_gain_ = sigma * expexted_inv;
+    const auto& k = kalman_gain_;
 
-    VectorXt ext_mean = ext_mean_pred + K * (measurement - expected_measurement_mean);
-    MatrixXt ext_cov = ext_cov_pred - K * expected_measurement_cov * K.transpose();
+    VectorXt ext_mean = ext_mean_pred + k * (measurement - expected_measurement_mean);
+    MatrixXt ext_cov = ext_cov_pred - k * expected_measurement_cov * k.transpose();
 
-    mean = ext_mean.topLeftCorner(state_dim, 1);
-    cov = ext_cov.topLeftCorner(state_dim, state_dim);
+    mean_ = ext_mean.topLeftCorner(state_dim_, 1);
+    cov_ = ext_cov.topLeftCorner(state_dim_, state_dim_);
   }
 
   /*			getter			*/
-  const VectorXt& getMean() const { return mean; }
-  const MatrixXt& getCov() const { return cov; }
-  const MatrixXt& getSigmaPoints() const { return sigma_points; }
+  const VectorXt& getMean() const { return mean_; }
+  const MatrixXt& getCov() const { return cov_; }
+  const MatrixXt& getSigmaPoints() const { return sigma_points_; }
 
-  System& getSystem() { return system; }
-  const System& getSystem() const { return system; }
-  const MatrixXt& getProcessNoiseCov() const { return process_noise; }
-  const MatrixXt& getMeasurementNoiseCov() const { return measurement_noise; }
+  System& getSystem() { return system_; }
+  const System& getSystem() const { return system_; }
+  const MatrixXt& getProcessNoiseCov() const { return process_noise_; }
+  const MatrixXt& getMeasurementNoiseCov() const { return measurement_noise_; }
 
-  const MatrixXt& getKalmanGain() const { return kalman_gain; }
+  const MatrixXt& getKalmanGain() const { return kalman_gain_; }
 
   /*			setter			*/
   UnscentedKalmanFilterX& setMean(const VectorXt& m) {
-    mean = m;
+    mean_ = m;
     return *this;
   }
   UnscentedKalmanFilterX& setCov(const MatrixXt& s) {
-    cov = s;
+    cov_ = s;
     return *this;
   }
 
   UnscentedKalmanFilterX& setProcessNoiseCov(const MatrixXt& p) {
-    process_noise = p;
+    process_noise_ = p;
     return *this;
   }
   UnscentedKalmanFilterX& setMeasurementNoiseCov(const MatrixXt& m) {
-    measurement_noise = m;
+    measurement_noise_ = m;
     return *this;
   }
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 private:
-  const int state_dim;
-  const int measurement_dim;
-  const int sigma_points_samples;
+  const int state_dim_;
+  const int measurement_dim_;
+  const int sigma_points_samples_;
 
 public:
-  VectorXt mean;
-  MatrixXt cov;
+  VectorXt mean_;
+  MatrixXt cov_;
 
-  System system;
-  MatrixXt process_noise;      //
-  MatrixXt measurement_noise;  //
+  System system_;
+  MatrixXt process_noise_;      //
+  MatrixXt measurement_noise_;  //
 
-  T lambda;
-  VectorXt weights;
+  T lambda_;
+  VectorXt weights_;
 
-  MatrixXt sigma_points;
+  MatrixXt sigma_points_;
 
-  VectorXt ext_weights;
-  MatrixXt ext_sigma_points;
-  MatrixXt expected_measurements;
+  VectorXt ext_weights_;
+  MatrixXt ext_sigma_points_;
+  MatrixXt expected_measurements_;
 
 private:
   /**
    * @brief compute sigma points
    * @param mean          mean
    * @param cov           covariance
-   * @param sigma_points  calculated sigma points
+   * @param sigma_points_  calculated sigma points
    */
-  void computeSigmaPoints(const VectorXt& mean, const MatrixXt& cov, MatrixXt& sigma_points) {
+  void computeSigmaPoints(const VectorXt& mean, const MatrixXt& cov, MatrixXt& sigma_points_) {
     const int n = mean.size();
     assert(cov.rows() == n && cov.cols() == n);
 
     Eigen::LLT<MatrixXt> llt;
-    llt.compute((n + lambda) * cov);
+    llt.compute((n + lambda_) * cov);
     MatrixXt l = llt.matrixL();
 
-    sigma_points.row(0) = mean;
+    sigma_points_.row(0) = mean;
     for (int i = 0; i < n; i++) {
-      sigma_points.row(1 + i * 2) = mean + l.col(i);
-      sigma_points.row(1 + i * 2 + 1) = mean - l.col(i);
+      sigma_points_.row(1 + i * 2) = mean + l.col(i);
+      sigma_points_.row(1 + i * 2 + 1) = mean - l.col(i);
     }
   }
 
@@ -300,22 +300,22 @@ private:
     const double eps = 1e-9;
 
     Eigen::EigenSolver<MatrixXt> solver(cov);
-    MatrixXt D = solver.pseudoEigenvalueMatrix();
-    MatrixXt V = solver.pseudoEigenvectors();
-    for (int i = 0; i < D.rows(); i++) {
-      if (D(i, i) < eps) {
-        D(i, i) = eps;
+    MatrixXt d = solver.pseudoEigenvalueMatrix();
+    MatrixXt v = solver.pseudoEigenvectors();
+    for (int i = 0; i < d.rows(); i++) {
+      if (d(i, i) < eps) {
+        d(i, i) = eps;
       }
     }
 
-    cov = V * D * V.inverse();
+    cov = v * d * v.inverse();
   }
 
 public:
-  MatrixXt kalman_gain;
+  MatrixXt kalman_gain_;
 
-  std::mt19937 mt;
-  std::normal_distribution<T> normal_dist;
+  std::mt19937 mt_;
+  std::normal_distribution<T> normal_dist_;
 };
 
 }  // namespace alg

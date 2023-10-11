@@ -245,9 +245,9 @@ private:
       return;
     }
 
-    ros::Time last_correction_time = pose_estimator->last_correction_time();
+    ros::Time lastCorrectionTime = pose_estimator->lastCorrectionTime();
     // Skip calculation if timestamp is wrong
-    if (stamp < last_correction_time) {
+    if (stamp < lastCorrectionTime) {
       return;
     }
     // transform pointcloud into base_frame_id
@@ -267,7 +267,7 @@ private:
     last_scan = filtered;
 
     if (relocalizing) {
-      delta_estimater->add_frame(filtered);
+      delta_estimater->addFrame(filtered);
     }
 
     std::lock_guard<std::mutex> estimator_lock(pose_estimator_mutex);
@@ -289,7 +289,7 @@ private:
         const auto& gyro = (*imu_iter)->angular_velocity;
         double acc_sign = invert_acc ? -1.0 : 1.0;
         double gyro_sign = invert_gyro ? -1.0 : 1.0;
-        pose_estimator->predict_imu((*imu_iter)->header.stamp, acc_sign * Eigen::Vector3f(acc.x, acc.y, acc.z), gyro_sign * Eigen::Vector3f(gyro.x, gyro.y, gyro.z));
+        pose_estimator->predictImu((*imu_iter)->header.stamp, acc_sign * Eigen::Vector3f(acc.x, acc.y, acc.z), gyro_sign * Eigen::Vector3f(gyro.x, gyro.y, gyro.z));
       }
       imu_data.erase(imu_data.begin(), imu_iter);
     } else if (use_odom) {
@@ -320,7 +320,7 @@ private:
           double roll, pitch, yaw;
           tf::Matrix3x3(odom_travel_angular).getRPY(roll, pitch, yaw);
           Eigen::Vector3f odom_twist_angular(roll / odom_time_diff_sec, pitch / odom_time_diff_sec, yaw / odom_time_diff_sec);
-          pose_estimator->predict_odom(odom_stamp, odom_twist_linear, odom_twist_angular);
+          pose_estimator->predictOdom(odom_stamp, odom_twist_linear, odom_twist_angular);
         }
         odom_stamp_last = odom_stamp;
       } else {
@@ -414,7 +414,7 @@ private:
     Eigen::Isometry3f pose = Eigen::Isometry3f::Identity();
     pose.linear() = Eigen::Quaternionf(result.orientation.w, result.orientation.x, result.orientation.y, result.orientation.z).toRotationMatrix();
     pose.translation() = Eigen::Vector3f(result.position.x, result.position.y, result.position.z);
-    pose = pose * delta_estimater->estimated_delta();
+    pose = pose * delta_estimater->estimatedDelta();
 
     std::lock_guard<std::mutex> lock(pose_estimator_mutex);
     pose_estimator.reset(new hdl_localization::PoseEstimator(
@@ -596,13 +596,13 @@ private:
 
     std::vector<double> errors(6, 0.0);
 
-    if (pose_estimator->without_pred_error()) {
+    if (pose_estimator->withoutPredError()) {
       status.prediction_labels.push_back(std_msgs::String());
       status.prediction_labels.back().data = "without_prediction";
-      status.prediction_errors.push_back(tf2::eigenToTransform(Eigen::Isometry3d(pose_estimator->without_pred_error().get().cast<double>())).transform);
+      status.prediction_errors.push_back(tf2::eigenToTransform(Eigen::Isometry3d(pose_estimator->withoutPredError().get().cast<double>())).transform);
     }
 
-    if (pose_estimator->motion_pred_error()) {
+    if (pose_estimator->motionPredError()) {
       status.prediction_labels.push_back(std_msgs::String());
       if(use_imu){
         status.prediction_labels.back().data = "imu_prediction";
@@ -611,7 +611,7 @@ private:
       }else{
         status.prediction_labels.back().data = "motion_model";
       }
-      status.prediction_errors.push_back(tf2::eigenToTransform(Eigen::Isometry3d(pose_estimator->motion_pred_error().get().cast<double>())).transform);
+      status.prediction_errors.push_back(tf2::eigenToTransform(Eigen::Isometry3d(pose_estimator->motionPredError().get().cast<double>())).transform);
     }
 
     status_pub.publish(status);
