@@ -7,7 +7,7 @@
 #include <ros/ros.h>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
-#include <pcl/registration/registration.h>
+#include <pclomp/ndt_omp.h>
 
 namespace kkl {
 namespace alg {
@@ -37,7 +37,7 @@ public:
    * @param fitness_reject     Do not process localization when scan matching fitness score is low
    */
   PoseEstimator(
-    pcl::Registration<PointT, PointT>::Ptr& registration,
+    pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr& registration,
     const Eigen::Vector3f& pos,
     const Eigen::Quaternionf& quat,
     double cool_time_duration = 1.0,
@@ -109,7 +109,7 @@ private:
   boost::optional<Eigen::Matrix4f> without_pred_error_;
   boost::optional<Eigen::Matrix4f> motion_pred_error_;
 
-  pcl::Registration<PointT, PointT>::Ptr registration_;
+  pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr registration_;
 };
 
 }  // namespace hdl_localization

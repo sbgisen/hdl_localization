@@ -14,7 +14,7 @@ namespace hdl_localization {
  * @param fitness_reject      Do not process localization when scan matching fitness score is low
  */
 PoseEstimator::PoseEstimator(
-  pcl::Registration<PointT, PointT>::Ptr& registration,
+  pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr& registration,
   const Eigen::Vector3f& initial_position,
   const Eigen::Quaternionf& initial_orientation,
   double cool_time_duration,
@@ -32,6 +32,16 @@ PoseEstimator::PoseEstimator(
   angular_correction_gain_(angular_correction_gain),
   angular_correction_distance_reject_(angular_correction_distance_reject),
   angular_correction_distance_reliable_(angular_correction_distance_reliable) {
+  ROS_WARN(
+    "Pamans: %f, %f, %f, %f, %f, %f, %f",
+    cool_time_duration_,
+    fitness_reject_,
+    fitness_reliable_,
+    linear_correction_gain_,
+    angular_correction_gain_,
+    angular_correction_distance_reject_,
+    angular_correction_distance_reliable_);
+
   // Initialize initial pose
   Eigen::Matrix4f initial_pose = Eigen::Matrix4f::Identity();
   initial_pose.block<3, 1>(0, 3) = initial_position;
@@ -63,9 +73,9 @@ PoseEstimator::PoseEstimator(
   // or subscribe an odometry topic and use its covariance
   // Initialize odometry process noise covariance matrix
   odom_process_noise_ = Eigen::MatrixXf::Identity(16, 16);
-  odom_process_noise_.middleRows(0, 3) *= 1e-3;    // Position
-  odom_process_noise_.middleRows(3, 3) *= 1e-9;    // Velocity
-  odom_process_noise_.middleRows(6, 4) *= 1e-6;    // Orientation
+  odom_process_noise_.middleRows(0, 3) *= 1e-3;   // Position
+  odom_process_noise_.middleRows(3, 3) *= 1e-9;   // Velocity
+  odom_process_noise_.middleRows(6, 4) *= 1e-6;   // Orientation
   odom_process_noise_.middleRows(13, 3) *= 1e-12;  // Angular velocity
 
   // Initialize IMU process noise covariance matrix
@@ -170,6 +180,23 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
     ROS_WARN_THROTTLE(5.0, "Scan matching fitness score is low (%f). Skip correction.", fitness_score);
     return aligned;
   }
+  double near_fitness_distance = 20.0;
+  double fitness_score_near = registration_->getFitnessScore(near_fitness_distance);
+  if (near_fitness_distance > fitness_reject_) {
+    ROS_WARN_THROTTLE(5.0, "Scan matching near fitness score is low (%f). Skip correction.", fitness_score_near);
+    return aligned;
+  }
+  double max_probability = 3.3;
+  double transform_probability = std::min(1.0, registration_->getTransformationProbability() / max_probability);
+  if (transform_probability < 0.1) {
+    ROS_WARN_THROTTLE(5.0, "Scan matching transformation probability is low (%f). Skip correction.", transform_probability);
+    return aligned;
+  }
+  double iter = registration_->getFinalNumIteration();
+  ROS_WARN_THROTTLE(1.0, "Scan matching fitness score: %f (near: %f, prob: %f, iter: %f)", fitness_score, fitness_score_near, transform_probability, iter);
+
+  double probability_scaling = transform_probability;
+  double iter_scaling = std::max(std::min(1.0, iter / 30.0), 0.0);
   Eigen::Matrix4f trans = registration_->getFinalTransformation();
   Eigen::Vector3f p_measure = trans.block<3, 1>(0, 3);
   Eigen::Quaternionf q_measure(trans.block<3, 3>(0, 0));
@@ -181,11 +208,12 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
   Eigen::Quaternionf q_estimate(ukf_->mean_[6], ukf_->mean_[7], ukf_->mean_[8], ukf_->mean_[9]);
   // Get difference between predicted and measured
   Eigen::Vector3f p_diff = p_measure - p_estimate;
-  double diff_linear_scaling = std::max(std::min(linear_correction_gain_, 1.0), 0.0);
-  double diff_angular_scaling = std::max(std::min(angular_correction_gain_, 1.0), 0.0);
+  double diff_linear_scaling = transform_probability * std::max(std::min(linear_correction_gain_, 1.0), 0.0);
+  double diff_angular_scaling = transform_probability * std::max(std::min(angular_correction_gain_, 1.0), 0.0);
   // Correct only the position because the accuracy of angle correction is low when the position is significantly off.
   double diff_linear_norm = (p_measure - p_estimate).norm();
   double diff_angular_norm = fabs(q_estimate.angularDistance(q_measure));
+  double covariance_scaling = fitness_reliable_ / (fitness_reliable_ + fitness_score);
   if (diff_linear_norm > angular_correction_distance_reject_) {
     diff_angular_scaling = 0.0;
   } else {
@@ -204,9 +232,17 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
     diff_angular_scaling /= (diff_angular_norm / max_angular_correction);
     diff_linear_norm /= (diff_angular_norm / max_angular_correction);
   }
+  ROS_WARN_THROTTLE(
+    1.0,
+    "covariance_scaling: %f, probability_scaling: %f, iter_scaling: %f, diff_linear_norm: %f, diff_angular_norm: %f",
+    covariance_scaling,
+    probability_scaling,
+    iter_scaling,
+    diff_linear_norm,
+    diff_angular_norm);
   // When fitness_score is large, the gain of correction is reduced
-  diff_linear_scaling *= (fitness_reliable_ / (fitness_reliable_ + fitness_score));
-  diff_angular_scaling *= (fitness_reliable_ / (fitness_reliable_ + fitness_score));
+  diff_linear_scaling *= covariance_scaling * probability_scaling;
+  diff_angular_scaling *= covariance_scaling * probability_scaling;
   // Add difference to current estimation
   Eigen::Vector3f p_measure_smooth = p_estimate + p_diff * diff_linear_scaling;
   Eigen::Quaternionf q_measure_smooth = q_estimate.slerp(diff_angular_scaling, q_measure);
@@ -221,18 +257,18 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
   // Add remaining difference to covavriance
   Eigen::Vector3f linear_err = p_measure - p_measure_smooth;
   Eigen::Quaternionf q_err = q_measure * q_measure_smooth.inverse();
-  // Eigen::Vector3f euler_err = q_err.toRotationMatrix().eulerAngles(0, 1, 2);
-  Eigen::MatrixXf registration_measurement_noise = Eigen::MatrixXf::Identity(7, 7);
-  registration_measurement_noise.middleRows(0, 3) *= 0.001 * fitness_score;  // Position
-  registration_measurement_noise.middleRows(3, 4) *= 0.001 * fitness_score;  // Orientation
-  registration_measurement_noise(0, 0) += fabs(linear_err.x());
-  registration_measurement_noise(1, 1) += fabs(linear_err.y());
-  registration_measurement_noise(2, 2) += fabs(linear_err.z());
-  registration_measurement_noise(3, 3) += fabs(q_err.w());
-  registration_measurement_noise(4, 4) += fabs(q_err.x());
-  registration_measurement_noise(5, 5) += fabs(q_err.y());
-  registration_measurement_noise(6, 6) += fabs(q_err.z());
-  ukf_->setMeasurementNoiseCov(registration_measurement_noise);
+  // Eigen::MatrixXf registration_measurement_noise = Eigen::MatrixXf::Identity(7, 7);
+  // probability_scaling = std::min(probability_scaling, 0.000001);
+  // registration_measurement_noise.middleRows(0, 3) *= 1e6 * fitness_score / probability_scaling;  // Position
+  // registration_measurement_noise.middleRows(3, 4) *= 1e6  * fitness_score / probability_scaling;  // Orientation
+  // registration_measurement_noise(0, 0) += fabs(linear_err.x());
+  // registration_measurement_noise(1, 1) += fabs(linear_err.y());
+  // registration_measurement_noise(2, 2) += fabs(linear_err.z());
+  // registration_measurement_noise(3, 3) += fabs(q_err.w());
+  // registration_measurement_noise(4, 4) += fabs(q_err.x());
+  // registration_measurement_noise(5, 5) += fabs(q_err.y());
+  // registration_measurement_noise(6, 6) += fabs(q_err.z());
+  // ukf_->setMeasurementNoiseCov(registration_measurement_noise);
   ukf_->correct(observation);
   return aligned;
 }

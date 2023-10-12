@@ -137,7 +137,7 @@ public:
   }
 
 private:
-  pcl::Registration<PointT, PointT>::Ptr create_registration() const {
+  pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr create_registration() const {
     std::string reg_method = private_nh.param<std::string>("reg_method", "NDT_OMP");
     std::string ndt_neighbor_search_method = private_nh.param<std::string>("ndt_neighbor_search_method", "DIRECT7");
     double ndt_neighbor_search_radius = private_nh.param<double>("ndt_neighbor_search_radius", 2.0);
@@ -164,30 +164,30 @@ private:
         ndt->setNeighborhoodSearchMethod(pclomp::KDTREE);
       }
       return ndt;
-    } else if (reg_method.find("NDT_CUDA") != std::string::npos) {
-      NODELET_INFO("NDT_CUDA is selected");
-      boost::shared_ptr<fast_gicp::NDTCuda<PointT, PointT>> ndt(new fast_gicp::NDTCuda<PointT, PointT>);
-      ndt->setResolution(ndt_resolution);
+    // } else if (reg_method.find("NDT_CUDA") != std::string::npos) {
+    //   NODELET_INFO("NDT_CUDA is selected");
+    //   boost::shared_ptr<fast_gicp::NDTCuda<PointT, PointT>> ndt(new fast_gicp::NDTCuda<PointT, PointT>);
+    //   ndt->setResolution(ndt_resolution);
 
-      if (reg_method.find("D2D") != std::string::npos) {
-        ndt->setDistanceMode(fast_gicp::NDTDistanceMode::D2D);
-      } else if (reg_method.find("P2D") != std::string::npos) {
-        ndt->setDistanceMode(fast_gicp::NDTDistanceMode::P2D);
-      }
+    //   if (reg_method.find("D2D") != std::string::npos) {
+    //     ndt->setDistanceMode(fast_gicp::NDTDistanceMode::D2D);
+    //   } else if (reg_method.find("P2D") != std::string::npos) {
+    //     ndt->setDistanceMode(fast_gicp::NDTDistanceMode::P2D);
+    //   }
 
-      if (ndt_neighbor_search_method == "DIRECT1") {
-        NODELET_INFO("search_method DIRECT1 is selected");
-        ndt->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT1);
-      } else if (ndt_neighbor_search_method == "DIRECT7") {
-        NODELET_INFO("search_method DIRECT7 is selected");
-        ndt->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT7);
-      } else if (ndt_neighbor_search_method == "DIRECT_RADIUS") {
-        NODELET_INFO_STREAM("search_method DIRECT_RADIUS is selected : " << ndt_neighbor_search_radius);
-        ndt->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT_RADIUS, ndt_neighbor_search_radius);
-      } else {
-        NODELET_WARN("invalid search method was given");
-      }
-      return ndt;
+    //   if (ndt_neighbor_search_method == "DIRECT1") {
+    //     NODELET_INFO("search_method DIRECT1 is selected");
+    //     ndt->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT1);
+    //   } else if (ndt_neighbor_search_method == "DIRECT7") {
+    //     NODELET_INFO("search_method DIRECT7 is selected");
+    //     ndt->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT7);
+    //   } else if (ndt_neighbor_search_method == "DIRECT_RADIUS") {
+    //     NODELET_INFO_STREAM("search_method DIRECT_RADIUS is selected : " << ndt_neighbor_search_radius);
+    //     ndt->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT_RADIUS, ndt_neighbor_search_radius);
+    //   } else {
+    //     NODELET_WARN("invalid search method was given");
+    //   }
+    //   return ndt;
     }
 
     NODELET_ERROR_STREAM("unknown registration method:" << reg_method);
@@ -658,7 +658,7 @@ private:
   // globalmap and registration method
   pcl::PointCloud<PointT>::Ptr globalmap;
   pcl::Filter<PointT>::Ptr downsample_filter;
-  pcl::Registration<PointT, PointT>::Ptr registration;
+  pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr registration;
 
   // pose estimator
   std::mutex pose_estimator_mutex;
