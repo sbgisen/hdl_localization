@@ -294,7 +294,7 @@ private:
       imu_data.erase(imu_data.begin(), imu_iter);
     } else if (use_odom) {
       if (!odom_ready) {
-        sleep(0.1);
+        usleep(100000);
         odom_ready = tf_buffer.canTransform(map_frame_id, odom_frame_id, ros::Time::now(), ros::Duration(10.0));
         if (!odom_ready) {
           NODELET_ERROR("Waiting for %s -> %s transform", base_frame_id.c_str(), odom_frame_id.c_str());

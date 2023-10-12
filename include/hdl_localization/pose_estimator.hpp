@@ -18,7 +18,7 @@ class UnscentedKalmanFilterX;
 
 namespace hdl_localization {
 
-class PoseSystem;
+class PoseEstimationSystem;
 class OdomSystem;
 
 /**
@@ -103,7 +103,7 @@ private:
 
   Eigen::MatrixXf process_noise_;
   Eigen::MatrixXf odom_process_noise_, imu_process_noise_;
-  std::unique_ptr<kkl::alg::UnscentedKalmanFilterX<float, PoseSystem>> ukf_;
+  std::unique_ptr<kkl::alg::UnscentedKalmanFilterX<float, PoseEstimationSystem>> ukf_;
 
   Eigen::Matrix4f last_observation_;
   boost::optional<Eigen::Matrix4f> without_pred_error_;

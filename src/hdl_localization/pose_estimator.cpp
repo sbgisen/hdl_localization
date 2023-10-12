@@ -76,8 +76,8 @@ PoseEstimator::PoseEstimator(
 
   // Initialize covariance matrix
   Eigen::MatrixXf cov = Eigen::MatrixXf::Identity(16, 16) * 0.01;
-  PoseSystem system;
-  ukf_.reset(new kkl::alg::UnscentedKalmanFilterX<float, PoseSystem>(system, 16, 7, process_noise_, measurement_noise, mean, cov));
+  PoseEstimationSystem system;
+  ukf_.reset(new kkl::alg::UnscentedKalmanFilterX<float, PoseEstimationSystem>(system, 16, 7, process_noise_, measurement_noise, mean, cov));
 }
 
 /**
@@ -102,7 +102,7 @@ void PoseEstimator::predict(const ros::Time& stamp) {
   double dt = (stamp - prev_stamp_).toSec();
   prev_stamp_ = stamp;
   ukf_->setProcessNoiseCov(process_noise_ * dt);
-  ukf_->system_.dt_ = dt;
+  ukf_->system_.time_step_ = dt;
   ukf_->predict();
 }
 
@@ -123,7 +123,7 @@ void PoseEstimator::predictImu(const ros::Time& stamp, const Eigen::Vector3f& im
   double dt = (stamp - prev_stamp_).toSec();
   prev_stamp_ = stamp;
   ukf_->setProcessNoiseCov(imu_process_noise_ * dt);
-  ukf_->system_.dt_ = dt;
+  ukf_->system_.time_step_ = dt;
   ukf_->predictImu(imu_acc, imu_gyro);
 }
 
@@ -144,7 +144,7 @@ void PoseEstimator::predictOdom(const ros::Time& stamp, const Eigen::Vector3f& o
   double dt = (stamp - prev_stamp_).toSec();
   prev_stamp_ = stamp;
   ukf_->setProcessNoiseCov(odom_process_noise_ * dt);
-  ukf_->system_.dt_ = dt;
+  ukf_->system_.time_step_ = dt;
   ukf_->predictOdom(odom_twist_linear, odom_twist_angular);
 }
 
