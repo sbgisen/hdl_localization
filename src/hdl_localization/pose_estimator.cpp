@@ -73,9 +73,9 @@ PoseEstimator::PoseEstimator(
   // or subscribe an odometry topic and use its covariance
   // Initialize odometry process noise covariance matrix
   odom_process_noise_ = Eigen::MatrixXf::Identity(16, 16);
-  odom_process_noise_.middleRows(0, 3) *= 1e-3;   // Position
-  odom_process_noise_.middleRows(3, 3) *= 1e-9;   // Velocity
-  odom_process_noise_.middleRows(6, 4) *= 1e-6;   // Orientation
+  odom_process_noise_.middleRows(0, 3) *= 1e-3;    // Position
+  odom_process_noise_.middleRows(3, 3) *= 1e-9;    // Velocity
+  odom_process_noise_.middleRows(6, 4) *= 1e-6;    // Orientation
   odom_process_noise_.middleRows(13, 3) *= 1e-12;  // Angular velocity
 
   // Initialize IMU process noise covariance matrix
@@ -206,21 +206,20 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
   // Get current estimation pose
   Eigen::Vector3f p_estimate = ukf_->mean_.head<3>();
   Eigen::Quaternionf q_estimate(ukf_->mean_[6], ukf_->mean_[7], ukf_->mean_[8], ukf_->mean_[9]);
-  // Get difference between predicted and measured
-  Eigen::Vector3f p_diff = p_measure - p_estimate;
+  // If the value is unreliable, the correction is reduced
   double diff_linear_scaling = transform_probability * std::max(std::min(linear_correction_gain_, 1.0), 0.0);
   double diff_angular_scaling = transform_probability * std::max(std::min(angular_correction_gain_, 1.0), 0.0);
   // Correct only the position because the accuracy of angle correction is low when the position is significantly off.
   double diff_linear_norm = (p_measure - p_estimate).norm();
   double diff_angular_norm = fabs(q_estimate.angularDistance(q_measure));
-  double covariance_scaling = fitness_reliable_ / (fitness_reliable_ + fitness_score);
+  double fitness_scaling = fitness_reliable_ / (fitness_reliable_ + fitness_score);
   if (diff_linear_norm > angular_correction_distance_reject_) {
     diff_angular_scaling = 0.0;
   } else {
     diff_angular_scaling = angular_correction_distance_reliable_ / (angular_correction_distance_reliable_ + diff_linear_norm / angular_correction_distance_reject_);
   }
   // Limit max correction to prevent jumping
-  double max_linear_correction = 1.0;
+  double max_linear_correction = 3.0;
   double max_angular_correction = 1.0;
   if (diff_linear_norm > max_linear_correction) {
     diff_linear_scaling /= (diff_linear_norm / max_linear_correction);
@@ -232,19 +231,12 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
     diff_angular_scaling /= (diff_angular_norm / max_angular_correction);
     diff_linear_norm /= (diff_angular_norm / max_angular_correction);
   }
-  ROS_WARN_THROTTLE(
-    1.0,
-    "covariance_scaling: %f, probability_scaling: %f, iter_scaling: %f, diff_linear_norm: %f, diff_angular_norm: %f",
-    covariance_scaling,
-    probability_scaling,
-    iter_scaling,
-    diff_linear_norm,
-    diff_angular_norm);
+  ROS_WARN_THROTTLE(1.0, "fitness_scaling: %f, probability_scaling: %f, iter_scaling: %f", fitness_scaling, probability_scaling, iter_scaling);
   // When fitness_score is large, the gain of correction is reduced
-  diff_linear_scaling *= covariance_scaling * probability_scaling;
-  diff_angular_scaling *= covariance_scaling * probability_scaling;
+  diff_linear_scaling *= probability_scaling;
+  diff_angular_scaling *= probability_scaling;
   // Add difference to current estimation
-  Eigen::Vector3f p_measure_smooth = p_estimate + p_diff * diff_linear_scaling;
+  Eigen::Vector3f p_measure_smooth = p_estimate + diff_linear_scaling * (p_measure - p_estimate);
   Eigen::Quaternionf q_measure_smooth = q_estimate.slerp(diff_angular_scaling, q_measure);
   // Update kalman filter
   Eigen::VectorXf observation(7);

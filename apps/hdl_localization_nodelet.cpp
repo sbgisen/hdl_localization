@@ -117,12 +117,12 @@ public:
       init_pose,
       init_orientation,
       private_nh.param<double>("cool_time_duration", 0.5),
-      private_nh.param<double>("fitness_reject", 30.0),
-      private_nh.param<double>("fitness_reliable", 0.03),
+      private_nh.param<double>("fitness_reject", 100.0),
+      private_nh.param<double>("fitness_reliable", 1.0),
       private_nh.param<double>("linear_correction_gain", 1.0),
-      private_nh.param<double>("angular_correction_gain", 1.0),
-      private_nh.param<double>("angular_correction_distance_reject", 1.0),
-      private_nh.param<double>("angular_correction_distance_reliable", 0.001)));
+      private_nh.param<double>("angular_correction_gain", 0.1),
+      private_nh.param<double>("angular_correction_distance_reject", 10.0),
+      private_nh.param<double>("angular_correction_distance_reliable", 0.1)));
     if (use_imu) {
       NODELET_INFO("enable imu-based prediction");
       imu_sub = mt_nh.subscribe("/gpsimu_driver/imu_data", 5, &HdlLocalizationNodelet::imu_callback, this);
@@ -422,12 +422,12 @@ private:
       pose.translation(),
       Eigen::Quaternionf(pose.linear()),
       private_nh.param<double>("cool_time_duration", 0.5),
-      private_nh.param<double>("fitness_reject", 30.0),
-      private_nh.param<double>("fitness_reliable", 0.03),
+      private_nh.param<double>("fitness_reject", 100.0),
+      private_nh.param<double>("fitness_reliable", 1.0),
       private_nh.param<double>("linear_correction_gain", 1.0),
-      private_nh.param<double>("angular_correction_gain", 1.0),
-      private_nh.param<double>("angular_correction_distance_reject", 1.0),
-      private_nh.param<double>("angular_correction_distance_reliable", 0.001)));
+      private_nh.param<double>("angular_correction_gain", 0.1),
+      private_nh.param<double>("angular_correction_distance_reject", 10.0),
+      private_nh.param<double>("angular_correction_distance_reliable", 0.1)));
 
     relocalizing = false;
 
@@ -469,12 +469,12 @@ private:
       init_pose,
       init_orientation,
       private_nh.param<double>("cool_time_duration", 0.5),
-      private_nh.param<double>("fitness_reject", 30.0),
-      private_nh.param<double>("fitness_reliable", 0.03),
+      private_nh.param<double>("fitness_reject", 100.0),
+      private_nh.param<double>("fitness_reliable", 1.0),
       private_nh.param<double>("linear_correction_gain", 1.0),
-      private_nh.param<double>("angular_correction_gain", 1.0),
-      private_nh.param<double>("angular_correction_distance_reject", 1.0),
-      private_nh.param<double>("angular_correction_distance_reliable", 0.001)));
+      private_nh.param<double>("angular_correction_gain", 0.1),
+      private_nh.param<double>("angular_correction_distance_reject", 10.0),
+      private_nh.param<double>("angular_correction_distance_reliable", 0.1)));
   }
 
   /**
