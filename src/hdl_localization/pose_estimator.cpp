@@ -193,7 +193,7 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
     return aligned;
   }
   double iter = registration_->getFinalNumIteration();
-  ROS_WARN_THROTTLE(1.0, "Scan matching fitness score: %f (near: %f, prob: %f, iter: %f)", fitness_score, fitness_score_near, transform_probability, iter);
+  // ROS_WARN_THROTTLE(1.0, "Scan matching fitness score: %f (near: %f, prob: %f, iter: %f)", fitness_score, fitness_score_near, transform_probability, iter);
 
   double probability_scaling = transform_probability;
   double iter_scaling = std::max(std::min(1.0, iter / 30.0), 0.0);
@@ -231,7 +231,7 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
     diff_angular_scaling /= (diff_angular_norm / max_angular_correction);
     diff_linear_norm /= (diff_angular_norm / max_angular_correction);
   }
-  ROS_WARN_THROTTLE(1.0, "fitness_scaling: %f, probability_scaling: %f, iter_scaling: %f", fitness_scaling, probability_scaling, iter_scaling);
+  // ROS_WARN_THROTTLE(1.0, "fitness_scaling: %f, probability_scaling: %f, iter_scaling: %f", fitness_scaling, probability_scaling, iter_scaling);
   // When fitness_score is large, the gain of correction is reduced
   diff_linear_scaling *= probability_scaling;
   diff_angular_scaling *= probability_scaling;
