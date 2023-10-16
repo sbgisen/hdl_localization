@@ -54,12 +54,12 @@ public:
     odom_stamp_last = ros::Time::now();
 
     initialize_params();
-    map_frame_id = private_nh.param<std::string>("map_frame_id", "map");
-    odom_frame_id = private_nh.param<std::string>("odom_frame_id", "odom");
-    base_frame_id = private_nh.param<std::string>("base_frame_id", "base_link");
+    map_frame = private_nh.param<std::string>("map_frame", "map");
+    odom_frame = private_nh.param<std::string>("odom_frame", "odom");
+    base_frame = private_nh.param<std::string>("base_frame", "base_link");
 
     specify_init_pose = private_nh.param<bool>("specify_init_pose", false);
-    use_odom = private_nh.param<bool>("enable_robot_odometry_prediction", false);
+    use_odom_frame = private_nh.param<bool>("use_odom_frame", false);
     if (specify_init_pose) {
       init_pose.x() = private_nh.param<double>("init_pos_x", 0.0);
       init_pose.y() = private_nh.param<double>("init_pos_y", 0.0);
@@ -68,13 +68,13 @@ public:
       init_orientation.y() = private_nh.param<double>("init_ori_y", 0.0);
       init_orientation.z() = private_nh.param<double>("init_ori_z", 0.0);
       init_orientation.w() = private_nh.param<double>("init_ori_w", 1.0);
-    } else if (use_odom) {
+    } else if (use_odom_frame) {
       odom_ready = false;
       initialize_on_odom = private_nh.param<bool>("initialize_on_odom", true);
-      tf_buffer.canTransform(map_frame_id, odom_frame_id, ros::Time(0), ros::Duration(1.0));
+      tf_buffer.canTransform(map_frame, odom_frame, ros::Time(0), ros::Duration(1.0));
       if (initialize_on_odom) {
-        if (tf_buffer.canTransform(map_frame_id, base_frame_id, ros::Time(0), ros::Duration(10.0))) {
-          geometry_msgs::TransformStamped tf_map2base = tf_buffer.lookupTransform(map_frame_id, base_frame_id, ros::Time(0), ros::Duration(10.0));
+        if (tf_buffer.canTransform(map_frame, base_frame, ros::Time(0), ros::Duration(10.0))) {
+          geometry_msgs::TransformStamped tf_map2base = tf_buffer.lookupTransform(map_frame, base_frame, ros::Time(0), ros::Duration(10.0));
           init_pose.x() = tf_map2base.transform.translation.x;
           init_pose.y() = tf_map2base.transform.translation.y;
           init_pose.z() = tf_map2base.transform.translation.z;
@@ -83,16 +83,16 @@ public:
           init_orientation.z() = tf_map2base.transform.rotation.z;
           init_orientation.w() = tf_map2base.transform.rotation.w;
         } else {
-          NODELET_ERROR("Lookup transform failed %s -> %s", map_frame_id.c_str(), base_frame_id.c_str());
+          NODELET_ERROR("Lookup transform failed %s -> %s", map_frame.c_str(), base_frame.c_str());
           initialize_on_odom = false;
         }
       }
     }
 
-    enable_tf = private_nh.param<bool>("enable_tf", true);
+    publish_tf = private_nh.param<bool>("publish_tf", true);
     use_imu = private_nh.param<bool>("use_imu", true);
-    if (use_odom && use_imu) {
-      NODELET_WARN("[HdlLocalizationNodelet] Both use_odom and use_imu enabled -> disabling use_imu");
+    if (use_odom_frame && use_imu) {
+      NODELET_WARN("[HdlLocalizationNodelet] Both use_odom_frame and use_imu enabled -> disabling use_imu");
       use_imu = false;
     }
     invert_acc = private_nh.param<bool>("invert_acc", false);
@@ -250,11 +250,11 @@ private:
     if (stamp < lastCorrectionTime) {
       return;
     }
-    // transform pointcloud into base_frame_id
+    // transform pointcloud into base_frame
     std::string tfError;
     pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());
-    if (this->tf_buffer.canTransform(base_frame_id, pcl_cloud->header.frame_id, stamp, ros::Duration(0.1), &tfError)) {
-      if (!pcl_ros::transformPointCloud(base_frame_id, *pcl_cloud, *cloud, this->tf_buffer)) {
+    if (this->tf_buffer.canTransform(base_frame, pcl_cloud->header.frame_id, stamp, ros::Duration(0.1), &tfError)) {
+      if (!pcl_ros::transformPointCloud(base_frame, *pcl_cloud, *cloud, this->tf_buffer)) {
         NODELET_ERROR("point cloud cannot be transformed into target frame!!");
         return;
       }
@@ -292,22 +292,22 @@ private:
         pose_estimator->predictImu((*imu_iter)->header.stamp, acc_sign * Eigen::Vector3f(acc.x, acc.y, acc.z), gyro_sign * Eigen::Vector3f(gyro.x, gyro.y, gyro.z));
       }
       imu_data.erase(imu_data.begin(), imu_iter);
-    } else if (use_odom) {
+    } else if (use_odom_frame) {
       if (!odom_ready) {
         usleep(100000);
-        odom_ready = tf_buffer.canTransform(map_frame_id, odom_frame_id, ros::Time::now(), ros::Duration(10.0));
+        odom_ready = tf_buffer.canTransform(map_frame, odom_frame, ros::Time::now(), ros::Duration(10.0));
         if (!odom_ready) {
-          NODELET_ERROR("Waiting for %s -> %s transform", base_frame_id.c_str(), odom_frame_id.c_str());
+          NODELET_ERROR("Waiting for %s -> %s transform", base_frame.c_str(), odom_frame.c_str());
           return;
         }
       }
       // PointClouds + Oodometry prediction
-      if (tf_buffer.canTransform(base_frame_id, odom_stamp_last, base_frame_id, ros::Time(0), odom_frame_id, ros::Duration(0.1))) {
+      if (tf_buffer.canTransform(base_frame, odom_stamp_last, base_frame, ros::Time(0), odom_frame, ros::Duration(0.1))) {
         // Get the amount of odometry movement since the last calculation
         // Coordinate system where the front of the robot is x
-        geometry_msgs::TransformStamped odom_delta = tf_buffer.lookupTransform(base_frame_id, odom_stamp_last, base_frame_id, ros::Time(0), odom_frame_id);
-        // Get the latest base_frame_id to get the time
-        geometry_msgs::TransformStamped odom_now = tf_buffer.lookupTransform(odom_frame_id, base_frame_id, ros::Time(0));
+        geometry_msgs::TransformStamped odom_delta = tf_buffer.lookupTransform(base_frame, odom_stamp_last, base_frame, ros::Time(0), odom_frame);
+        // Get the latest base_frame to get the time
+        geometry_msgs::TransformStamped odom_now = tf_buffer.lookupTransform(odom_frame, base_frame, ros::Time(0));
         ros::Time odom_stamp = odom_now.header.stamp;
         ros::Duration odom_time_diff = odom_stamp - odom_stamp_last;
         double odom_time_diff_sec = odom_time_diff.toSec();
@@ -324,13 +324,13 @@ private:
         }
         odom_stamp_last = odom_stamp;
       } else {
-        if (tf_buffer.canTransform(odom_frame_id, base_frame_id, ros::Time(0), ros::Duration(0.1))) {
+        if (tf_buffer.canTransform(odom_frame, base_frame, ros::Time(0), ros::Duration(0.1))) {
           NODELET_WARN_THROTTLE(10.0, "The last timestamp is wrong, skip localization");
-          // Get the latest base_frame_id to get the time
-          geometry_msgs::TransformStamped odom_now = tf_buffer.lookupTransform(odom_frame_id, base_frame_id, ros::Time(0));
+          // Get the latest base_frame to get the time
+          geometry_msgs::TransformStamped odom_now = tf_buffer.lookupTransform(odom_frame, base_frame, ros::Time(0));
           odom_stamp_last = odom_now.header.stamp;
         } else {
-          NODELET_WARN_STREAM("Failed to look up transform between " << cloud->header.frame_id << " and " << odom_frame_id);
+          NODELET_WARN_STREAM("Failed to look up transform between " << cloud->header.frame_id << " and " << odom_frame);
         }
       }
     } else {
@@ -342,7 +342,7 @@ private:
     auto aligned = pose_estimator->correct(stamp, filtered, fitness_score);
 
     if (aligned_pub.getNumSubscribers()) {
-      aligned->header.frame_id = map_frame_id;
+      aligned->header.frame_id = map_frame;
       aligned->header.stamp = cloud->header.stamp;
       aligned_pub.publish(aligned);
     }
@@ -440,7 +440,7 @@ private:
    */
   void initialpose_callback(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg) {
     NODELET_INFO("[hdl_localization] initial pose received");
-    geometry_msgs::TransformStamped tf_map2global = tf_buffer.lookupTransform(map_frame_id, msg->header.frame_id, ros::Time(0), ros::Duration(10.0));
+    geometry_msgs::TransformStamped tf_map2global = tf_buffer.lookupTransform(map_frame, msg->header.frame_id, ros::Time(0), ros::Duration(10.0));
     tf2::Vector3 vec_global2robot(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z);
     tf2::Quaternion q_global2robot(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
     // Get vector from odom to robot
@@ -456,7 +456,7 @@ private:
     init_orientation.y() = q_map2robot.y();
     init_orientation.z() = q_map2robot.z();
     init_orientation.w() = q_map2robot.w();
-    if (use_odom) {
+    if (use_odom_frame) {
       tf_buffer.clear();
       odom_ready = false;
     }
@@ -502,14 +502,14 @@ private:
    */
   void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose, const double fitness_score) {
     // broadcast the transform over tf
-    if (enable_tf) {
-      if (tf_buffer.canTransform(odom_frame_id, base_frame_id, ros::Time(0))) {
+    if (publish_tf) {
+      if (tf_buffer.canTransform(odom_frame, base_frame, ros::Time(0))) {
         geometry_msgs::TransformStamped map_wrt_frame = tf2::eigenToTransform(Eigen::Isometry3d(pose.inverse().cast<double>()));
         map_wrt_frame.header.stamp = stamp;
-        map_wrt_frame.header.frame_id = base_frame_id;
-        map_wrt_frame.child_frame_id = map_frame_id;
+        map_wrt_frame.header.frame_id = base_frame;
+        map_wrt_frame.child_frame_id = map_frame;
 
-        geometry_msgs::TransformStamped frame_wrt_odom = tf_buffer.lookupTransform(odom_frame_id, base_frame_id, ros::Time(0), ros::Duration(0.1));
+        geometry_msgs::TransformStamped frame_wrt_odom = tf_buffer.lookupTransform(odom_frame, base_frame, ros::Time(0), ros::Duration(0.1));
         Eigen::Matrix4f frame2odom = tf2::transformToEigen(frame_wrt_odom).cast<float>().matrix();
 
         geometry_msgs::TransformStamped map_wrt_odom;
@@ -522,15 +522,15 @@ private:
         geometry_msgs::TransformStamped odom_trans;
         odom_trans.transform = tf2::toMsg(odom_wrt_map);
         odom_trans.header.stamp = stamp;
-        odom_trans.header.frame_id = map_frame_id;
-        odom_trans.child_frame_id = odom_frame_id;
+        odom_trans.header.frame_id = map_frame;
+        odom_trans.child_frame_id = odom_frame;
 
         tf_broadcaster.sendTransform(odom_trans);
       } else {
         geometry_msgs::TransformStamped odom_trans = tf2::eigenToTransform(Eigen::Isometry3d(pose.cast<double>()));
         odom_trans.header.stamp = stamp;
-        odom_trans.header.frame_id = map_frame_id;
-        odom_trans.child_frame_id = base_frame_id;
+        odom_trans.header.frame_id = map_frame;
+        odom_trans.child_frame_id = base_frame;
         tf_broadcaster.sendTransform(odom_trans);
       }
     }
@@ -538,8 +538,8 @@ private:
     // publish the transform
     nav_msgs::Odometry odom;
     odom.header.stamp = stamp;
-    odom.header.frame_id = map_frame_id;
-    odom.child_frame_id = base_frame_id;
+    odom.header.frame_id = map_frame;
+    odom.child_frame_id = base_frame;
 
     tf::poseEigenToMsg(Eigen::Isometry3d(pose.cast<double>()), odom.pose.pose);
     odom.pose.covariance[0] = private_nh.param<double>("cov_scaling_factor_x", 1.0) * fitness_score;
@@ -606,7 +606,7 @@ private:
       status.prediction_labels.push_back(std_msgs::String());
       if(use_imu){
         status.prediction_labels.back().data = "imu_prediction";
-      }else if(use_odom){
+      }else if(use_odom_frame){
         status.prediction_labels.back().data = "odom_prediction";
       }else{
         status.prediction_labels.back().data = "motion_model";
@@ -623,17 +623,17 @@ private:
   ros::NodeHandle mt_nh;
   ros::NodeHandle private_nh;
 
-  bool use_odom;
+  bool use_odom_frame;
   bool odom_ready;
   bool initialize_on_odom;
   bool specify_init_pose;
   Eigen::Vector3f init_pose;
   Eigen::Quaternionf init_orientation;
   ros::Time odom_stamp_last;
-  std::string odom_frame_id;
-  std::string base_frame_id;
-  std::string map_frame_id;
-  bool enable_tf;
+  std::string odom_frame;
+  std::string base_frame;
+  std::string map_frame;
+  bool publish_tf;
 
   bool use_imu;
   bool invert_acc;
