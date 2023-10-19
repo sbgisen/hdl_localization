@@ -76,7 +76,7 @@ public:
    * @param cloud   input cloud
    * @return cloud aligned to the globalmap
    */
-  pcl::PointCloud<PointT>::Ptr correct(const ros::Time& stamp, const pcl::PointCloud<PointT>::ConstPtr& cloud, double& fitness_score);
+  pcl::PointCloud<PointT>::Ptr correct(const ros::Time& stamp, const pcl::PointCloud<PointT>::ConstPtr& cloud, double pose_covariance[36]);
 
   /* getters */
   ros::Time lastCorrectionTime() const;

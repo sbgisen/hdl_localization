@@ -201,11 +201,10 @@ private:
       boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
       voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
       downsample_filter = voxelgrid;
-    }else{
+    } else {
       ROS_WARN("Input downsample_filter is disabled");
       downsample_filter.reset();
     }
-
 
     NODELET_INFO("create registration method for localization");
     registration = create_registration();
@@ -338,8 +337,8 @@ private:
       pose_estimator->predict(stamp);
     }
     // Perform scan matching using the calculated position as the initial value
-    double fitness_score;
-    auto aligned = pose_estimator->correct(stamp, filtered, fitness_score);
+    double pose_covariance[36] ;
+    auto aligned = pose_estimator->correct(stamp, filtered, pose_covariance);
 
     if (aligned_pub.getNumSubscribers()) {
       aligned->header.frame_id = map_frame;
@@ -351,7 +350,7 @@ private:
       publish_scan_matching_status(points_msg->header, aligned);
     }
 
-    publish_odometry(points_msg->header.stamp, pose_estimator->matrix(), fitness_score);
+    publish_odometry(points_msg->header.stamp, pose_estimator->matrix(), pose_covariance);
   }
 
   /**
@@ -440,7 +439,29 @@ private:
    */
   void initialpose_callback(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg) {
     NODELET_INFO("[hdl_localization] initial pose received");
-    geometry_msgs::TransformStamped tf_map2global = tf_buffer.lookupTransform(map_frame, msg->header.frame_id, ros::Time(0), ros::Duration(10.0));
+    geometry_msgs::TransformStamped tf_map2global;
+    if (map_frame != msg->header.frame_id) {
+      tf_map2global = tf_buffer.lookupTransform(map_frame, msg->header.frame_id, ros::Time(0), ros::Duration(1.0));
+      if (tf_map2global.header.frame_id != map_frame) {
+        ROS_ERROR("[hdl_localization] Failed to get transform from %s to %s", map_frame.c_str(), msg->header.frame_id.c_str());
+        tf_map2global.transform.translation.x = 0.0;
+        tf_map2global.transform.translation.y = 0.0;
+        tf_map2global.transform.translation.z = 0.0;
+        tf_map2global.transform.rotation.x = 0.0;
+        tf_map2global.transform.rotation.y = 0.0;
+        tf_map2global.transform.rotation.z = 0.0;
+        tf_map2global.transform.rotation.w = 1.0;
+      }
+    }
+    else {
+      tf_map2global.transform.translation.x = 0.0;
+      tf_map2global.transform.translation.y = 0.0;
+      tf_map2global.transform.translation.z = 0.0;
+      tf_map2global.transform.rotation.x = 0.0;
+      tf_map2global.transform.rotation.y = 0.0;
+      tf_map2global.transform.rotation.z = 0.0;
+      tf_map2global.transform.rotation.w = 1.0;
+    }
     tf2::Vector3 vec_global2robot(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z);
     tf2::Quaternion q_global2robot(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
     // Get vector from odom to robot
@@ -457,7 +478,7 @@ private:
     init_orientation.z() = q_map2robot.z();
     init_orientation.w() = q_map2robot.w();
     if (use_odom_frame) {
-      tf_buffer.clear();
+      odom_stamp_last = msg->header.stamp;
       odom_ready = false;
     }
     if (use_imu) {
@@ -500,7 +521,7 @@ private:
    * @param stamp  timestamp
    * @param pose   odometry pose to be published
    */
-  void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose, const double fitness_score) {
+  void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose, double pose_covariance[36]) {
     // broadcast the transform over tf
     if (publish_tf) {
       if (tf_buffer.canTransform(odom_frame, base_frame, ros::Time(0))) {
@@ -542,16 +563,19 @@ private:
     odom.child_frame_id = base_frame;
 
     tf::poseEigenToMsg(Eigen::Isometry3d(pose.cast<double>()), odom.pose.pose);
-    odom.pose.covariance[0] = private_nh.param<double>("cov_scaling_factor_x", 1.0) * fitness_score;
-    odom.pose.covariance[7] = private_nh.param<double>("cov_scaling_factor_y", 1.0) * fitness_score;
-    odom.pose.covariance[14] = private_nh.param<double>("cov_scaling_factor_z", 1.0) * fitness_score;
-    odom.pose.covariance[21] = private_nh.param<double>("cov_scaling_factor_R", 1.0) * fitness_score;
-    odom.pose.covariance[28] = private_nh.param<double>("cov_scaling_factor_P", 1.0) * fitness_score;
-    odom.pose.covariance[35] = private_nh.param<double>("cov_scaling_factor_Y", 1.0) * fitness_score;
+    odom.pose.covariance[0] = private_nh.param<double>("cov_scaling_factor_x", 1.0) * pose_covariance[0];
+    odom.pose.covariance[7] = private_nh.param<double>("cov_scaling_factor_y", 1.0) * pose_covariance[7];
+    odom.pose.covariance[14] = private_nh.param<double>("cov_scaling_factor_z", 1.0) * pose_covariance[14];
+    odom.pose.covariance[21] = private_nh.param<double>("cov_scaling_factor_R", 1.0) * pose_covariance[21];
+    odom.pose.covariance[28] = private_nh.param<double>("cov_scaling_factor_P", 1.0) * pose_covariance[28];
+    odom.pose.covariance[35] = private_nh.param<double>("cov_scaling_factor_Y", 1.0) * pose_covariance[35];
 
-    odom.twist.twist.linear.x = 0;
-    odom.twist.twist.linear.y = 0;
-    odom.twist.twist.angular.z = 0.0;
+    odom.twist.twist.linear.x = 0.0;
+    odom.twist.twist.linear.y = 0.0;
+    odom.twist.twist.linear.z = 0.0;
+    odom.twist.twist.linear.x = 0.0;
+    odom.twist.twist.linear.y = 0.0;
+    odom.twist.twist.linear.z = 0.0;
 
     pose_pub.publish(odom);
   }
@@ -604,11 +628,11 @@ private:
 
     if (pose_estimator->motionPredError()) {
       status.prediction_labels.push_back(std_msgs::String());
-      if(use_imu){
+      if (use_imu) {
         status.prediction_labels.back().data = "imu_prediction";
-      }else if(use_odom_frame){
+      } else if (use_odom_frame) {
         status.prediction_labels.back().data = "odom_prediction";
-      }else{
+      } else {
         status.prediction_labels.back().data = "motion_model";
       }
       status.prediction_errors.push_back(tf2::eigenToTransform(Eigen::Isometry3d(pose_estimator->motionPredError().get().cast<double>())).transform);
@@ -673,7 +697,7 @@ private:
   ros::ServiceServer relocalize_server;
   ros::ServiceClient set_global_map_service;
   ros::ServiceClient query_global_localization_service;
-};
+};  // namespace hdl_localization
 }  // namespace hdl_localization
 
 PLUGINLIB_EXPORT_CLASS(hdl_localization::HdlLocalizationNodelet, nodelet::Nodelet)
