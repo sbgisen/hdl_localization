@@ -43,72 +43,73 @@ public:
   HdlLocalizationNodelet() : tf_buffer(), tf_listener(tf_buffer)
   {
   }
-  virtual ~HdlLocalizationNodelet()
+  ~HdlLocalizationNodelet() override
   {
   }
 
   void onInit() override
   {
-    nh = getNodeHandle();
-    mt_nh = getMTNodeHandle();
-    private_nh = getPrivateNodeHandle();
-    odom_stamp_last = ros::Time::now();
+    nh_ = getNodeHandle();
+    mt_nh_ = getMTNodeHandle();
+    private_nh_ = getPrivateNodeHandle();
+    odom_stamp_last_ = ros::Time::now();
 
-    initialize_params();
+    initializeParams();
 
-    use_odom = private_nh.param<bool>("enable_robot_odometry_prediction", false);
-    robot_odom_frame_id = private_nh.param<std::string>("robot_odom_frame_id", "robot_odom");
-    odom_child_frame_id = private_nh.param<std::string>("odom_child_frame_id", "base_link");
-    enable_tf = private_nh.param<bool>("enable_tf", true);
+    use_odom_ = private_nh_.param<bool>("enable_robot_odometry_prediction", false);
+    robot_odom_frame_id_ = private_nh_.param<std::string>("robot_odom_frame_id", "robot_odom");
+    odom_child_frame_id_ = private_nh_.param<std::string>("odom_child_frame_id", "base_link");
+    enable_tf_ = private_nh_.param<bool>("enable_tf", true);
 
-    use_imu = private_nh.param<bool>("use_imu", true);
-    if (use_odom && use_imu)
+    use_imu_ = private_nh_.param<bool>("use_imu", true);
+    if (use_odom_ && use_imu_)
     {
       NODELET_WARN("[HdlLocalizationNodelet] Both use_odom and use_imu enabled -> disabling use_imu");
-      use_imu = false;
+      use_imu_ = false;
     }
-    invert_acc = private_nh.param<bool>("invert_acc", false);
-    invert_gyro = private_nh.param<bool>("invert_gyro", false);
-    if (use_imu)
+    invert_acc_ = private_nh_.param<bool>("invert_acc", false);
+    invert_gyro_ = private_nh_.param<bool>("invert_gyro", false);
+    if (use_imu_)
     {
       NODELET_INFO("enable imu-based prediction");
-      imu_sub = mt_nh.subscribe("/gpsimu_driver/imu_data", 256, &HdlLocalizationNodelet::imu_callback, this);
+      imu_sub_ = mt_nh_.subscribe("/gpsimu_driver/imu_data", 256, &HdlLocalizationNodelet::imuCallback, this);
     }
-    points_sub = mt_nh.subscribe("/velodyne_points", 5, &HdlLocalizationNodelet::points_callback, this);
-    globalmap_sub = nh.subscribe("/globalmap", 1, &HdlLocalizationNodelet::globalmap_callback, this);
-    initialpose_sub = nh.subscribe("/initialpose", 8, &HdlLocalizationNodelet::initialpose_callback, this);
+    points_sub_ = mt_nh_.subscribe("/velodyne_points", 5, &HdlLocalizationNodelet::pointsCallback, this);
+    globalmap_sub_ = nh_.subscribe("/globalmap", 1, &HdlLocalizationNodelet::globalmapCallback, this);
+    initialpose_sub_ = nh_.subscribe("/initialpose", 8, &HdlLocalizationNodelet::initialposeCallback, this);
 
-    pose_pub = nh.advertise<nav_msgs::Odometry>("/odom", 5, false);
-    aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("/aligned_points", 5, false);
-    status_pub = nh.advertise<ScanMatchingStatus>("/status", 5, false);
+    pose_pub_ = nh_.advertise<nav_msgs::Odometry>("/odom", 5, false);
+    aligned_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/aligned_points", 5, false);
+    status_pub_ = nh_.advertise<ScanMatchingStatus>("/status", 5, false);
 
     // global localization
-    use_global_localization = private_nh.param<bool>("use_global_localization", true);
-    if (use_global_localization)
+    use_global_localization_ = private_nh_.param<bool>("use_global_localization", true);
+    if (use_global_localization_)
     {
       NODELET_INFO_STREAM("wait for global localization services");
       ros::service::waitForService("/hdl_global_localization/set_global_map");
       ros::service::waitForService("/hdl_global_localization/query");
 
-      set_global_map_service = nh.serviceClient<hdl_global_localization::SetGlobalMap>("/hdl_global_localization/"
-                                                                                       "set_global_map");
-      query_global_localization_service = nh.serviceClient<hdl_global_localization::QueryGlobalLocalization>("/hdl_"
-                                                                                                             "global_"
-                                                                                                             "localizat"
-                                                                                                             "ion/"
-                                                                                                             "query");
+      set_global_map_service_ = nh_.serviceClient<hdl_global_localization::SetGlobalMap>("/hdl_global_localization/"
+                                                                                         "set_global_map");
+      query_global_localization_service_ = nh_.serviceClient<hdl_global_localization::QueryGlobalLocalization>("/hdl_"
+                                                                                                               "global_"
+                                                                                                               "localiz"
+                                                                                                               "at"
+                                                                                                               "ion/"
+                                                                                                               "query");
 
-      relocalize_server = nh.advertiseService("/relocalize", &HdlLocalizationNodelet::relocalize, this);
+      relocalize_server_ = nh_.advertiseService("/relocalize", &HdlLocalizationNodelet::relocalize, this);
     }
   }
 
 private:
-  pcl::Registration<PointT, PointT>::Ptr create_registration() const
+  pcl::Registration<PointT, PointT>::Ptr createRegistration() const
   {
-    std::string reg_method = private_nh.param<std::string>("reg_method", "NDT_OMP");
-    std::string ndt_neighbor_search_method = private_nh.param<std::string>("ndt_neighbor_search_method", "DIRECT7");
-    double ndt_neighbor_search_radius = private_nh.param<double>("ndt_neighbor_search_radius", 2.0);
-    double ndt_resolution = private_nh.param<double>("ndt_resolution", 1.0);
+    std::string reg_method = private_nh_.param<std::string>("reg_method", "NDT_OMP");
+    std::string ndt_neighbor_search_method = private_nh_.param<std::string>("ndt_neighbor_search_method", "DIRECT7");
+    double ndt_neighbor_search_radius = private_nh_.param<double>("ndt_neighbor_search_radius", 2.0);
+    double ndt_resolution = private_nh_.param<double>("ndt_resolution", 1.0);
 
     if (reg_method == "NDT_OMP")
     {
@@ -183,10 +184,10 @@ private:
     return nullptr;
   }
 
-  void initialize_params()
+  void initializeParams()
   {
     // intialize scan matching method
-    double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.1);
+    double downsample_resolution = private_nh_.param<double>("downsample_resolution", 0.1);
     boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
     voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
     downsample_filter = voxelgrid;
@@ -196,11 +197,11 @@ private:
 
     // global localization
     NODELET_INFO("create registration method for fallback during relocalization");
-    relocalizing = false;
+    relocalizing_ = false;
     delta_estimater.reset(new DeltaEstimater(create_registration()));
 
     // initialize pose estimator
-    if (private_nh.param<bool>("specify_init_pose", true))
+    if (private_nh_.param<bool>("specify_init_pose", true))
     {
       NODELET_INFO("initialize pose estimator with specified parameters!!");
       pose_estimator.reset(new hdl_localization::PoseEstimator(
@@ -218,9 +219,9 @@ private:
    * @brief callback for imu data
    * @param imu_msg
    */
-  void imu_callback(const sensor_msgs::ImuConstPtr& imu_msg)
+  void imuCallback(const sensor_msgs::ImuConstPtr& imu_msg)
   {
-    std::lock_guard<std::mutex> lock(imu_data_mutex);
+    std::lock_guard<std::mutex> lock(imu_data_mutex_);
     imu_data.push_back(imu_msg);
   }
 
@@ -228,7 +229,7 @@ private:
    * @brief callback for point cloud data
    * @param points_msg
    */
-  void points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg)
+  void pointsCallback(const sensor_msgs::PointCloud2ConstPtr& points_msg)
   {
     if (!globalmap)
     {
@@ -253,7 +254,7 @@ private:
       return;
     }
     // transform pointcloud into odom_child_frame_id
-    std::string tfError;
+    std::string tf_error;
     pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());
     if (this->tf_buffer.canTransform(odom_child_frame_id, pcl_cloud->header.frame_id, stamp, ros::Duration(0.1),
                                      &tfError))
@@ -266,19 +267,19 @@ private:
     }
     else
     {
-      NODELET_ERROR(tfError.c_str());
+      NODELET_ERROR(tf_error.c_str());
       return;
     }
 
     auto filtered = downsample(cloud);
     last_scan = filtered;
 
-    if (relocalizing)
+    if (relocalizing_)
     {
       delta_estimater->add_frame(filtered);
     }
 
-    std::lock_guard<std::mutex> estimator_lock(pose_estimator_mutex);
+    std::lock_guard<std::mutex> estimator_lock(pose_estimator_mutex_);
     if (!pose_estimator)
     {
       NODELET_ERROR("waiting for initial pose input!!");
@@ -286,10 +287,10 @@ private:
     }
     Eigen::Matrix4f before = pose_estimator->matrix();
 
-    if (use_imu)
+    if (use_imu_)
     {
       // PointClouds + IMU prediction
-      std::lock_guard<std::mutex> lock(imu_data_mutex);
+      std::lock_guard<std::mutex> lock(imu_data_mutex_);
       auto imu_iter = imu_data.begin();
       for (imu_iter; imu_iter != imu_data.end(); imu_iter++)
       {
@@ -306,7 +307,7 @@ private:
       }
       imu_data.erase(imu_data.begin(), imu_iter);
     }
-    else if (use_odom)
+    else if (use_odom_)
     {
       // PointClouds + Oodometry prediction
       if (tf_buffer.canTransform(odom_child_frame_id, odom_stamp_last, odom_child_frame_id, ros::Time(0),
@@ -321,7 +322,7 @@ private:
         geometry_msgs::TransformStamped odom_now =
             tf_buffer.lookupTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0));
         ros::Time odom_stamp = odom_now.header.stamp;
-        ros::Duration odom_time_diff = odom_stamp - odom_stamp_last;
+        ros::Duration odom_time_diff = odom_stamp - odom_stamp_last_;
         double odom_time_diff_sec = odom_time_diff.toSec();
         if (odom_delta.header.stamp.isZero() || odom_time_diff_sec <= 0)
         {
@@ -340,7 +341,7 @@ private:
                                              yaw / odom_time_diff_sec);
           pose_estimator->predict_odom(odom_stamp, odom_twist_linear, odom_twist_angular);
         }
-        odom_stamp_last = odom_stamp;
+        odom_stamp_last_ = odom_stamp;
       }
       else
       {
@@ -368,14 +369,14 @@ private:
     double fitness_score;
     auto aligned = pose_estimator->correct(stamp, filtered, fitness_score);
 
-    if (aligned_pub.getNumSubscribers())
+    if (aligned_pub_.getNumSubscribers())
     {
       aligned->header.frame_id = "map";
       aligned->header.stamp = cloud->header.stamp;
       aligned_pub.publish(aligned);
     }
 
-    if (status_pub.getNumSubscribers())
+    if (status_pub_.getNumSubscribers())
     {
       publish_scan_matching_status(points_msg->header, aligned);
     }
@@ -387,7 +388,7 @@ private:
    * @brief callback for globalmap input
    * @param points_msg
    */
-  void globalmap_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg)
+  void globalmapCallback(const sensor_msgs::PointCloud2ConstPtr& points_msg)
   {
     NODELET_INFO("globalmap received!");
     pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());
@@ -396,13 +397,13 @@ private:
 
     registration->setInputTarget(globalmap);
 
-    if (use_global_localization)
+    if (use_global_localization_)
     {
       NODELET_INFO("set globalmap for global localization!");
       hdl_global_localization::SetGlobalMap srv;
       pcl::toROSMsg(*globalmap, srv.request.global_map);
 
-      if (!set_global_map_service.call(srv))
+      if (!set_global_map_service_.call(srv))
       {
         NODELET_INFO("failed to set global map");
       }
@@ -417,7 +418,7 @@ private:
    * @brief perform global localization to relocalize the sensor position
    * @param
    */
-  bool relocalize(std_srvs::EmptyRequest& req, std_srvs::EmptyResponse& res)
+  bool relocalize(std_srvs::EmptyRequest& /*req*/, std_srvs::EmptyResponse& /*res*/)
   {
     if (last_scan == nullptr)
     {
@@ -425,7 +426,7 @@ private:
       return false;
     }
 
-    relocalizing = true;
+    relocalizing_ = true;
     delta_estimater->reset();
     pcl::PointCloud<PointT>::ConstPtr scan = last_scan;
 
@@ -433,9 +434,9 @@ private:
     pcl::toROSMsg(*scan, srv.request.cloud);
     srv.request.max_num_candidates = 1;
 
-    if (!query_global_localization_service.call(srv) || srv.response.poses.empty())
+    if (!query_global_localization_service_.call(srv) || srv.response.poses.empty())
     {
-      relocalizing = false;
+      relocalizing_ = false;
       NODELET_INFO_STREAM("global localization failed");
       return false;
     }
@@ -456,12 +457,12 @@ private:
     pose.translation() = Eigen::Vector3f(result.position.x, result.position.y, result.position.z);
     pose = pose * delta_estimater->estimated_delta();
 
-    std::lock_guard<std::mutex> lock(pose_estimator_mutex);
+    std::lock_guard<std::mutex> lock(pose_estimator_mutex_);
     pose_estimator.reset(new hdl_localization::PoseEstimator(registration, pose.translation(),
                                                              Eigen::Quaternionf(pose.linear()),
                                                              private_nh.param<double>("cool_time_duration", 0.5)));
 
-    relocalizing = false;
+    relocalizing_ = false;
 
     return true;
   }
@@ -470,10 +471,10 @@ private:
    * @brief callback for initial pose input ("2D Pose Estimate" on rviz)
    * @param pose_msg
    */
-  void initialpose_callback(const geometry_msgs::PoseWithCovarianceStampedConstPtr& pose_msg)
+  void initialposeCallback(const geometry_msgs::PoseWithCovarianceStampedConstPtr& pose_msg)
   {
     NODELET_INFO("initial pose received!!");
-    std::lock_guard<std::mutex> lock(pose_estimator_mutex);
+    std::lock_guard<std::mutex> lock(pose_estimator_mutex_);
     const auto& p = pose_msg->pose.pose.position;
     const auto& q = pose_msg->pose.pose.orientation;
     pose_estimator.reset(new hdl_localization::PoseEstimator(registration, Eigen::Vector3f(p.x, p.y, p.z),
@@ -486,7 +487,7 @@ private:
    * @param cloud   input cloud
    * @return downsampled cloud
    */
-  pcl::PointCloud<PointT>::ConstPtr downsample(const pcl::PointCloud<PointT>::ConstPtr& cloud) const
+  pcl::PointCloud<PointT>::ConstPtr downsample(const pcl::PointCloud<PointT>::ConstPtr& /*cloud*/) const
   {
     if (!downsample_filter)
     {
@@ -506,10 +507,10 @@ private:
    * @param stamp  timestamp
    * @param pose   odometry pose to be published
    */
-  void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose, const double fitness_score)
+  void publishOdometry(const ros::Time& stamp, const Eigen::Matrix4f& pose, const double fitness_score)
   {
     // broadcast the transform over tf
-    if (enable_tf)
+    if (enable_tf_)
     {
       if (tf_buffer.canTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0)))
       {
@@ -572,7 +573,7 @@ private:
   /**
    * @brief publish scan matching status information
    */
-  void publish_scan_matching_status(const std_msgs::Header& header, pcl::PointCloud<pcl::PointXYZI>::ConstPtr aligned)
+  void publishScanMatchingStatus(const std_msgs::Header& header, pcl::PointCloud<pcl::PointXYZI>::ConstPtr /*aligned*/)
   {
     ScanMatchingStatus status;
     status.header = header;
@@ -580,8 +581,8 @@ private:
     status.has_converged = registration->hasConverged();
     status.matching_error = 0.0;
 
-    const double max_correspondence_dist = private_nh.param<double>("status_max_correspondence_dist", 0.5);
-    const double max_valid_point_dist = private_nh.param<double>("status_max_valid_point_dist", 25.0);
+    const double max_correspondence_dist = private_nh_.param<double>("status_max_correspondence_dist", 0.5);
+    const double max_valid_point_dist = private_nh_.param<double>("status_max_valid_point_dist", 25.0);
 
     int num_inliers = 0;
     int num_valid_points = 0;
@@ -646,54 +647,54 @@ private:
 
 private:
   // ROS
-  ros::NodeHandle nh;
-  ros::NodeHandle mt_nh;
-  ros::NodeHandle private_nh;
+  ros::NodeHandle nh_;
+  ros::NodeHandle mt_nh_;
+  ros::NodeHandle private_nh_;
 
-  bool use_odom;
-  ros::Time odom_stamp_last;
-  std::string robot_odom_frame_id;
-  std::string odom_child_frame_id;
-  bool enable_tf;
+  bool use_odom_;
+  ros::Time odom_stamp_last_;
+  std::string robot_odom_frame_id_;
+  std::string odom_child_frame_id_;
+  bool enable_tf_;
 
-  bool use_imu;
-  bool invert_acc;
-  bool invert_gyro;
-  ros::Subscriber imu_sub;
-  ros::Subscriber points_sub;
-  ros::Subscriber globalmap_sub;
-  ros::Subscriber initialpose_sub;
+  bool use_imu_;
+  bool invert_acc_;
+  bool invert_gyro_;
+  ros::Subscriber imu_sub_;
+  ros::Subscriber points_sub_;
+  ros::Subscriber globalmap_sub_;
+  ros::Subscriber initialpose_sub_;
 
-  ros::Publisher pose_pub;
-  ros::Publisher aligned_pub;
-  ros::Publisher status_pub;
+  ros::Publisher pose_pub_;
+  ros::Publisher aligned_pub_;
+  ros::Publisher status_pub_;
 
-  tf2_ros::Buffer tf_buffer;
-  tf2_ros::TransformListener tf_listener;
-  tf2_ros::TransformBroadcaster tf_broadcaster;
+  tf2_ros::Buffer tf_buffer_;
+  tf2_ros::TransformListener tf_listener_;
+  tf2_ros::TransformBroadcaster tf_broadcaster_;
 
   // imu input buffer
-  std::mutex imu_data_mutex;
-  std::vector<sensor_msgs::ImuConstPtr> imu_data;
+  std::mutex imu_data_mutex_;
+  std::vector<sensor_msgs::ImuConstPtr> imu_data_;
 
   // globalmap and registration method
-  pcl::PointCloud<PointT>::Ptr globalmap;
-  pcl::Filter<PointT>::Ptr downsample_filter;
-  pcl::Registration<PointT, PointT>::Ptr registration;
+  pcl::PointCloud<PointT>::Ptr globalmap_;
+  pcl::Filter<PointT>::Ptr downsample_filter_;
+  pcl::Registration<PointT, PointT>::Ptr registration_;
 
   // pose estimator
-  std::mutex pose_estimator_mutex;
-  std::unique_ptr<hdl_localization::PoseEstimator> pose_estimator;
+  std::mutex pose_estimator_mutex_;
+  std::unique_ptr<hdl_localization::PoseEstimator> pose_estimator_;
 
   // global localization
-  bool use_global_localization;
-  std::atomic_bool relocalizing;
-  std::unique_ptr<DeltaEstimater> delta_estimater;
+  bool use_global_localization_;
+  std::atomic_bool relocalizing_;
+  std::unique_ptr<DeltaEstimater> delta_estimater_;
 
-  pcl::PointCloud<PointT>::ConstPtr last_scan;
-  ros::ServiceServer relocalize_server;
-  ros::ServiceClient set_global_map_service;
-  ros::ServiceClient query_global_localization_service;
+  pcl::PointCloud<PointT>::ConstPtr last_scan_;
+  ros::ServiceServer relocalize_server_;
+  ros::ServiceClient set_global_map_service_;
+  ros::ServiceClient query_global_localization_service_;
 };
 }  // namespace hdl_localization
 

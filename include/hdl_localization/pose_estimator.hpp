@@ -55,7 +55,7 @@ public:
    * @param imu_acc      acceleration
    * @param imu_gyro     angular velocity
    */
-  void predict_imu(const ros::Time& stamp, const Eigen::Vector3f& imu_acc, const Eigen::Vector3f& imu_gyro);
+  void predictImu(const ros::Time& stamp, const Eigen::Vector3f& imu_acc, const Eigen::Vector3f& imu_gyro);
 
   /**
    * @brief update the state of the odomety-based pose estimation
@@ -63,8 +63,8 @@ public:
    * @param odom_twist_linear linear velocity
    * @param odom_twist_angular angular velocity
    */
-  void predict_odom(const ros::Time& stamp, const Eigen::Vector3f& odom_twist_linear,
-                    const Eigen::Vector3f& odom_twist_angular);
+  void predictOdom(const ros::Time& stamp, const Eigen::Vector3f& odom_twist_linear,
+                   const Eigen::Vector3f& odom_twist_angular);
 
   /**
    * @brief correct
@@ -75,32 +75,32 @@ public:
                                        double& fitness_score);
 
   /* getters */
-  ros::Time last_correction_time() const;
+  ros::Time lastCorrectionTime() const;
 
   Eigen::Vector3f pos() const;
   Eigen::Vector3f vel() const;
   Eigen::Quaternionf quat() const;
   Eigen::Matrix4f matrix() const;
 
-  const boost::optional<Eigen::Matrix4f>& wo_prediction_error() const;
-  const boost::optional<Eigen::Matrix4f>& imu_prediction_error() const;
-  const boost::optional<Eigen::Matrix4f>& odom_prediction_error() const;
+  const boost::optional<Eigen::Matrix4f>& woPredictionError() const;
+  const boost::optional<Eigen::Matrix4f>& imuPredictionError() const;
+  const boost::optional<Eigen::Matrix4f>& odomPredictionError() const;
 
 private:
-  ros::Time init_stamp;             // when the estimator was initialized
-  ros::Time prev_stamp;             // when the estimator was updated last time
-  ros::Time last_correction_stamp;  // when the estimator performed the correction step
-  double cool_time_duration;        //
+  ros::Time init_stamp_;             // when the estimator was initialized
+  ros::Time prev_stamp_;             // when the estimator was updated last time
+  ros::Time last_correction_stamp_;  // when the estimator performed the correction step
+  double cool_time_duration_;        //
 
-  Eigen::MatrixXf process_noise, odom_process_noise;
-  std::unique_ptr<kkl::alg::UnscentedKalmanFilterX<float, PoseSystem>> ukf;
+  Eigen::MatrixXf process_noise_, odom_process_noise_;
+  std::unique_ptr<kkl::alg::UnscentedKalmanFilterX<float, PoseSystem>> ukf_;
 
-  Eigen::Matrix4f last_observation;
-  boost::optional<Eigen::Matrix4f> wo_pred_error;
-  boost::optional<Eigen::Matrix4f> imu_pred_error;
-  boost::optional<Eigen::Matrix4f> odom_pred_error;
+  Eigen::Matrix4f last_observation_;
+  boost::optional<Eigen::Matrix4f> wo_pred_error_;
+  boost::optional<Eigen::Matrix4f> imu_pred_error_;
+  boost::optional<Eigen::Matrix4f> odom_pred_error_;
 
-  pcl::Registration<PointT, PointT>::Ptr registration;
+  pcl::Registration<PointT, PointT>::Ptr registration_;
 };
 
 }  // namespace hdl_localization

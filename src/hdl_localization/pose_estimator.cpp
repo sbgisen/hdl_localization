@@ -14,9 +14,9 @@ namespace hdl_localization
  * @param quat                initial orientation
  * @param cool_time_duration  during "cool time", prediction is not performed
  */
-PoseEstimator::PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& registration, const Eigen::Vector3f& pos,
+PoseEstimator::PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& /*registration*/, const Eigen::Vector3f& pos,
                              const Eigen::Quaternionf& quat, double cool_time_duration)
-  : registration(registration), cool_time_duration(cool_time_duration)
+  : registration(registration), cool_time_duration_(cool_time_duration)
 {
   last_observation = Eigen::Matrix4f::Identity();
   last_observation.block<3, 3>(0, 0) = quat.toRotationMatrix();
@@ -63,19 +63,19 @@ PoseEstimator::~PoseEstimator()
  */
 void PoseEstimator::predict(const ros::Time& stamp)
 {
-  if (init_stamp.is_zero())
+  if (init_stamp_.is_zero())
   {
-    init_stamp = stamp;
+    init_stamp_ = stamp;
   }
 
-  if ((stamp - init_stamp).toSec() < cool_time_duration || prev_stamp.is_zero() || prev_stamp == stamp)
+  if ((stamp - init_stamp_).toSec() < cool_time_duration_ || prev_stamp_.is_zero() || prev_stamp_ == stamp)
   {
-    prev_stamp = stamp;
+    prev_stamp_ = stamp;
     return;
   }
 
-  double dt = (stamp - prev_stamp).toSec();
-  prev_stamp = stamp;
+  double dt = (stamp - prev_stamp_).toSec();
+  prev_stamp_ = stamp;
 
   ukf->setProcessNoiseCov(process_noise * dt);
   ukf->system.dt = dt;
@@ -89,21 +89,21 @@ void PoseEstimator::predict(const ros::Time& stamp)
  * @param imu_acc      acceleration
  * @param imu_gyro     angular velocity
  */
-void PoseEstimator::predict_imu(const ros::Time& stamp, const Eigen::Vector3f& imu_acc, const Eigen::Vector3f& imu_gyro)
+void PoseEstimator::predictImu(const ros::Time& stamp, const Eigen::Vector3f& imu_acc, const Eigen::Vector3f& imu_gyro)
 {
-  if (init_stamp.is_zero())
+  if (init_stamp_.is_zero())
   {
-    init_stamp = stamp;
+    init_stamp_ = stamp;
   }
 
-  if ((stamp - init_stamp).toSec() < cool_time_duration || prev_stamp.is_zero() || prev_stamp == stamp)
+  if ((stamp - init_stamp_).toSec() < cool_time_duration_ || prev_stamp_.is_zero() || prev_stamp_ == stamp)
   {
-    prev_stamp = stamp;
+    prev_stamp_ = stamp;
     return;
   }
 
-  double dt = (stamp - prev_stamp).toSec();
-  prev_stamp = stamp;
+  double dt = (stamp - prev_stamp_).toSec();
+  prev_stamp_ = stamp;
 
   ukf->setProcessNoiseCov(process_noise * dt);
   ukf->system.dt = dt;
@@ -116,17 +116,17 @@ void PoseEstimator::predict_imu(const ros::Time& stamp, const Eigen::Vector3f& i
  * @param odom_twist_linear   linear velocity
  * @param odom_twist_angular  angular velocity
  */
-void PoseEstimator::predict_odom(const ros::Time& stamp, const Eigen::Vector3f& odom_twist_linear,
-                                 const Eigen::Vector3f& odom_twist_angular)
+void PoseEstimator::predictOdom(const ros::Time& stamp, const Eigen::Vector3f& odom_twist_linear,
+                                const Eigen::Vector3f& odom_twist_angular)
 {
-  if ((stamp - init_stamp).toSec() < cool_time_duration || prev_stamp.is_zero() || prev_stamp == stamp)
+  if ((stamp - init_stamp_).toSec() < cool_time_duration_ || prev_stamp_.is_zero() || prev_stamp_ == stamp)
   {
-    prev_stamp = stamp;
+    prev_stamp_ = stamp;
     return;
   }
 
-  double dt = (stamp - prev_stamp).toSec();
-  prev_stamp = stamp;
+  double dt = (stamp - prev_stamp_).toSec();
+  prev_stamp_ = stamp;
 
   ukf->setProcessNoiseCov(odom_process_noise * dt);
   ukf->system.dt = dt;
@@ -140,15 +140,15 @@ void PoseEstimator::predict_odom(const ros::Time& stamp, const Eigen::Vector3f& 
  * @return cloud aligned to the globalmap
  */
 pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Time& stamp,
-                                                                   const pcl::PointCloud<PointT>::ConstPtr& cloud,
+                                                                   const pcl::PointCloud<PointT>::ConstPtr& /*cloud*/,
                                                                    double& fitness_score)
 {
-  if (init_stamp.is_zero())
+  if (init_stamp_.is_zero())
   {
-    init_stamp = stamp;
+    init_stamp_ = stamp;
   }
 
-  last_correction_stamp = stamp;
+  last_correction_stamp_ = stamp;
 
   Eigen::Matrix4f no_guess = last_observation;
   Eigen::Matrix4f init_guess = matrix();
@@ -181,9 +181,9 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
 }
 
 /* getters */
-ros::Time PoseEstimator::last_correction_time() const
+ros::Time PoseEstimator::lastCorrectionTime() const
 {
-  return last_correction_stamp;
+  return last_correction_stamp_;
 }
 
 Eigen::Vector3f PoseEstimator::pos() const
@@ -209,17 +209,17 @@ Eigen::Matrix4f PoseEstimator::matrix() const
   return m;
 }
 
-const boost::optional<Eigen::Matrix4f>& PoseEstimator::wo_prediction_error() const
+const boost::optional<Eigen::Matrix4f>& PoseEstimator::woPredictionError() const
 {
   return wo_pred_error;
 }
 
-const boost::optional<Eigen::Matrix4f>& PoseEstimator::imu_prediction_error() const
+const boost::optional<Eigen::Matrix4f>& PoseEstimator::imuPredictionError() const
 {
   return imu_pred_error;
 }
 
-const boost::optional<Eigen::Matrix4f>& PoseEstimator::odom_prediction_error() const
+const boost::optional<Eigen::Matrix4f>& PoseEstimator::odomPredictionError() const
 {
   return odom_pred_error;
 }

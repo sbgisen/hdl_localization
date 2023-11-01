@@ -37,31 +37,31 @@ public:
   GlobalmapServerNodelet()
   {
   }
-  virtual ~GlobalmapServerNodelet()
+  ~GlobalmapServerNodelet() override
   {
   }
 
   void onInit() override
   {
-    nh = getNodeHandle();
-    mt_nh = getMTNodeHandle();
-    private_nh = getPrivateNodeHandle();
+    nh_ = getNodeHandle();
+    mt_nh_ = getMTNodeHandle();
+    private_nh_ = getPrivateNodeHandle();
 
-    initialize_params();
+    initializeParams();
 
     // publish globalmap with "latched" publisher
-    globalmap_pub = nh.advertise<sensor_msgs::PointCloud2>("/globalmap", 5, true);
-    map_update_sub = nh.subscribe("/map_request/pcd", 10, &GlobalmapServerNodelet::map_update_callback, this);
+    globalmap_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/globalmap", 5, true);
+    map_update_sub_ = nh_.subscribe("/map_request/pcd", 10, &GlobalmapServerNodelet::mapUpdateCallback, this);
 
-    globalmap_pub_timer =
-        nh.createWallTimer(ros::WallDuration(1.0), &GlobalmapServerNodelet::pub_once_cb, this, true, true);
+    globalmap_pub_timer_ =
+        nh_.createWallTimer(ros::WallDuration(1.0), &GlobalmapServerNodelet::pubOnceCb, this, true, true);
   }
 
 private:
-  void initialize_params()
+  void initializeParams()
   {
     // read globalmap from a pcd file
-    std::string globalmap_pcd = private_nh.param<std::string>("globalmap_pcd", "");
+    std::string globalmap_pcd = private_nh_.param<std::string>("globalmap_pcd", "");
     globalmap.reset(new pcl::PointCloud<PointT>());
     pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
     globalmap->header.frame_id = "map";
@@ -82,7 +82,7 @@ private:
     }
 
     // downsample globalmap
-    double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.1);
+    double downsample_resolution = private_nh_.param<double>("downsample_resolution", 0.1);
     boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
     voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
     voxelgrid->setInputCloud(globalmap);
@@ -93,12 +93,12 @@ private:
     globalmap = filtered;
   }
 
-  void pub_once_cb(const ros::WallTimerEvent& event)
+  void pubOnceCb(const ros::WallTimerEvent& /*event*/)
   {
     globalmap_pub.publish(globalmap);
   }
 
-  void map_update_callback(const std_msgs::String& msg)
+  void mapUpdateCallback(const std_msgs::String& msg)
   {
     ROS_INFO_STREAM("Received map request, map path : " << msg.data);
     std::string globalmap_pcd = msg.data;
@@ -107,7 +107,7 @@ private:
     globalmap->header.frame_id = "map";
 
     // downsample globalmap
-    double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.1);
+    double downsample_resolution = private_nh_.param<double>("downsample_resolution", 0.1);
     boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
     voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
     voxelgrid->setInputCloud(globalmap);
@@ -121,15 +121,15 @@ private:
 
 private:
   // ROS
-  ros::NodeHandle nh;
-  ros::NodeHandle mt_nh;
-  ros::NodeHandle private_nh;
+  ros::NodeHandle nh_;
+  ros::NodeHandle mt_nh_;
+  ros::NodeHandle private_nh_;
 
-  ros::Publisher globalmap_pub;
-  ros::Subscriber map_update_sub;
+  ros::Publisher globalmap_pub_;
+  ros::Subscriber map_update_sub_;
 
-  ros::WallTimer globalmap_pub_timer;
-  pcl::PointCloud<PointT>::Ptr globalmap;
+  ros::WallTimer globalmap_pub_timer_;
+  pcl::PointCloud<PointT>::Ptr globalmap_;
 };
 
 }  // namespace hdl_localization
