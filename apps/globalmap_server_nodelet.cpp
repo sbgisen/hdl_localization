@@ -28,7 +28,6 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(PointXYZRGBI,
 
 namespace hdl_localization
 {
-
 class GlobalmapServerNodelet : public nodelet::Nodelet
 {
 public:
@@ -62,18 +61,18 @@ private:
   {
     // read globalmap from a pcd file
     std::string globalmap_pcd = private_nh_.param<std::string>("globalmap_pcd", "");
-    globalmap.reset(new pcl::PointCloud<PointT>());
-    pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
-    globalmap->header.frame_id = "map";
+    globalmap_.reset(new pcl::PointCloud<PointT>());
+    pcl::io::loadPCDFile(globalmap_pcd, *globalmap_);
+    globalmap_->header.frame_id = "map";
 
     std::ifstream utm_file(globalmap_pcd + ".utm");
-    if (utm_file.is_open() && private_nh.param<bool>("convert_utm_to_local", true))
+    if (utm_file.is_open() && private_nh_.param<bool>("convert_utm_to_local", true))
     {
       double utm_easting;
       double utm_northing;
       double altitude;
       utm_file >> utm_easting >> utm_northing >> altitude;
-      for (auto& pt : globalmap->points)
+      for (auto& pt : globalmap_->points)
       {
         pt.getVector3fMap() -= Eigen::Vector3f(utm_easting, utm_northing, altitude);
       }
@@ -85,38 +84,38 @@ private:
     double downsample_resolution = private_nh_.param<double>("downsample_resolution", 0.1);
     boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
     voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
-    voxelgrid->setInputCloud(globalmap);
+    voxelgrid->setInputCloud(globalmap_);
 
     pcl::PointCloud<PointT>::Ptr filtered(new pcl::PointCloud<PointT>());
     voxelgrid->filter(*filtered);
 
-    globalmap = filtered;
+    globalmap_ = filtered;
   }
 
-  void pubOnceCb(const ros::WallTimerEvent& /*event*/)
+  void pubOnceCb(const ros::WallTimerEvent& event)
   {
-    globalmap_pub.publish(globalmap);
+    globalmap_pub_.publish(globalmap_);
   }
 
   void mapUpdateCallback(const std_msgs::String& msg)
   {
     ROS_INFO_STREAM("Received map request, map path : " << msg.data);
     std::string globalmap_pcd = msg.data;
-    globalmap.reset(new pcl::PointCloud<PointT>());
-    pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
-    globalmap->header.frame_id = "map";
+    globalmap_.reset(new pcl::PointCloud<PointT>());
+    pcl::io::loadPCDFile(globalmap_pcd, *globalmap_);
+    globalmap_->header.frame_id = "map";
 
     // downsample globalmap
     double downsample_resolution = private_nh_.param<double>("downsample_resolution", 0.1);
     boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
     voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
-    voxelgrid->setInputCloud(globalmap);
+    voxelgrid->setInputCloud(globalmap_);
 
     pcl::PointCloud<PointT>::Ptr filtered(new pcl::PointCloud<PointT>());
     voxelgrid->filter(*filtered);
 
-    globalmap = filtered;
-    globalmap_pub.publish(globalmap);
+    globalmap_ = filtered;
+    globalmap_pub_.publish(globalmap_);
   }
 
 private:

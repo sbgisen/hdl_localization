@@ -8,13 +8,12 @@
 
 namespace hdl_localization
 {
-
 class DeltaEstimater
 {
 public:
   using PointT = pcl::PointXYZI;
 
-  DeltaEstimater(pcl::Registration<PointT, PointT>::Ptr /*reg*/) : delta(Eigen::Isometry3f::Identity()), reg(reg)
+  DeltaEstimater(pcl::Registration<PointT, PointT>::Ptr reg) : delta_(Eigen::Isometry3f::Identity()), reg_(reg)
   {
   }
   ~DeltaEstimater()
@@ -24,35 +23,35 @@ public:
   void reset()
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    delta.setIdentity();
-    last_frame.reset();
+    delta_.setIdentity();
+    last_frame_.reset();
   }
 
-  void addFrame(pcl::PointCloud<PointT>::ConstPtr /*frame*/)
+  void addFrame(pcl::PointCloud<PointT>::ConstPtr frame)
   {
-    std::unique_lock<std::mutex> lock(mutex);
-    if (last_frame == nullptr)
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (last_frame_ == nullptr)
     {
-      last_frame = frame;
+      last_frame_ = frame;
       return;
     }
 
-    reg->setInputTarget(last_frame);
-    reg->setInputSource(frame);
+    reg_->setInputTarget(last_frame_);
+    reg_->setInputSource(frame);
     lock.unlock();
 
     pcl::PointCloud<PointT> aligned;
-    reg->align(aligned);
+    reg_->align(aligned);
 
     lock.lock();
-    last_frame = frame;
-    delta = delta * Eigen::Isometry3f(reg->getFinalTransformation());
+    last_frame_ = frame;
+    delta_ = delta_ * Eigen::Isometry3f(reg_->getFinalTransformation());
   }
 
   Eigen::Isometry3f estimatedDelta() const
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    return delta;
+    return delta_;
   }
 
 private:

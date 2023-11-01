@@ -20,7 +20,6 @@ class UnscentedKalmanFilterX;
 
 namespace hdl_localization
 {
-
 class PoseSystem;
 class OdomSystem;
 
