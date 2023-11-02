@@ -9,13 +9,17 @@
 #include <pcl/point_cloud.h>
 #include <pcl/registration/registration.h>
 
-namespace kkl {
-  namespace alg {
-template<typename T, class System> class UnscentedKalmanFilterX;
-  }
+namespace kkl
+{
+namespace alg
+{
+template <typename T, class System>
+class UnscentedKalmanFilterX;
 }
+}  // namespace kkl
 
-namespace hdl_localization {
+namespace hdl_localization
+{
 
 class PoseSystem;
 class OdomSystem;
@@ -23,7 +27,8 @@ class OdomSystem;
 /**
  * @brief scan matching-based pose estimator
  */
-class PoseEstimator {
+class PoseEstimator
+{
 public:
   using PointT = pcl::PointXYZI;
 
@@ -34,7 +39,8 @@ public:
    * @param quat                initial orientation
    * @param cool_time_duration  during "cool time", prediction is not performed
    */
-  PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& registration, const Eigen::Vector3f& pos, const Eigen::Quaternionf& quat, double cool_time_duration = 1.0);
+  PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& registration, const Eigen::Vector3f& pos,
+                const Eigen::Quaternionf& quat, double cool_time_duration = 1.0);
   ~PoseEstimator();
 
   /**
@@ -57,14 +63,16 @@ public:
    * @param odom_twist_linear linear velocity
    * @param odom_twist_angular angular velocity
    */
-  void predict_odom(const ros::Time& stamp, const Eigen::Vector3f& odom_twist_linear, const Eigen::Vector3f& odom_twist_angular);
+  void predict_odom(const ros::Time& stamp, const Eigen::Vector3f& odom_twist_linear,
+                    const Eigen::Vector3f& odom_twist_angular);
 
   /**
    * @brief correct
    * @param cloud   input cloud
    * @return cloud aligned to the globalmap
    */
-  pcl::PointCloud<PointT>::Ptr correct(const ros::Time& stamp, const pcl::PointCloud<PointT>::ConstPtr& cloud, double& fitness_score);
+  pcl::PointCloud<PointT>::Ptr correct(const ros::Time& stamp, const pcl::PointCloud<PointT>::ConstPtr& cloud,
+                                       double& fitness_score);
 
   /* getters */
   ros::Time last_correction_time() const;
@@ -93,7 +101,7 @@ private:
   boost::optional<Eigen::Matrix4f> odom_pred_error;
 
   pcl::Registration<PointT, PointT>::Ptr registration;
-  };
+};
 
 }  // namespace hdl_localization
 

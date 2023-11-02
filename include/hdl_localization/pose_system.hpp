@@ -3,26 +3,31 @@
 
 #include <kkl/alg/unscented_kalman_filter.hpp>
 
-namespace hdl_localization {
-
+namespace hdl_localization
+{
 /**
  * @brief Definition of system to be estimated by ukf
- * @note state = [px, py, pz, vx, vy, vz, qw, qx, qy, qz, acc_bias_x, acc_bias_y, acc_bias_z, gyro_bias_x, gyro_bias_y, gyro_bias_z]
+ * @note state = [px, py, pz, vx, vy, vz, qw, qx, qy, qz, acc_bias_x, acc_bias_y, acc_bias_z, gyro_bias_x, gyro_bias_y,
+ * gyro_bias_z]
  */
-class PoseSystem {
+class PoseSystem
+{
 public:
   typedef float T;
   typedef Eigen::Matrix<T, 3, 1> Vector3t;
   typedef Eigen::Matrix<T, 4, 4> Matrix4t;
   typedef Eigen::Matrix<T, Eigen::Dynamic, 1> VectorXt;
   typedef Eigen::Quaternion<T> Quaterniont;
+
 public:
-  PoseSystem() {
+  PoseSystem()
+  {
     dt = 0.01;
   }
 
   // system equation (without input)
-  VectorXt f(const VectorXt& state) const {
+  VectorXt f(const VectorXt& state) const
+  {
     VectorXt next_state(16);
 
     Vector3t pt = state.middleRows(0, 3);
@@ -50,7 +55,8 @@ public:
   }
 
   // system equation
-  VectorXt f_imu(const VectorXt& state, const Eigen::Vector3f& imu_acc, const Eigen::Vector3f& imu_gyro) const {
+  VectorXt f_imu(const VectorXt& state, const Eigen::Vector3f& imu_acc, const Eigen::Vector3f& imu_gyro) const
+  {
     VectorXt next_state(16);
 
     Vector3t pt = state.middleRows(0, 3);
@@ -72,7 +78,8 @@ public:
     Vector3t acc_ = raw_acc - acc_bias;
     Vector3t acc = qt * acc_;
     next_state.middleRows(3, 3) = vt + (acc - g) * dt;
-    // next_state.middleRows(3, 3) = vt; // + (acc - g) * dt;		// acceleration didn't contribute to accuracy due to large noise
+    // next_state.middleRows(3, 3) = vt; // + (acc - g) * dt;		// acceleration didn't contribute to accuracy due to
+    // large noise
 
     // orientation
     Vector3t gyro = raw_gyro - gyro_bias;
@@ -87,7 +94,9 @@ public:
     return next_state;
   }
 
-  VectorXt f_odom(const VectorXt& state, const Eigen::Vector3f& odom_twist_lin, const Eigen::Vector3f& odom_twist_ang) const {
+  VectorXt f_odom(const VectorXt& state, const Eigen::Vector3f& odom_twist_lin,
+                  const Eigen::Vector3f& odom_twist_ang) const
+  {
     VectorXt next_state(16);
     Vector3t pt = state.middleRows(0, 3);
     Vector3t vt = state.middleRows(3, 3);
@@ -117,7 +126,8 @@ public:
   }
 
   // observation equation
-  VectorXt h(const VectorXt& state) const {
+  VectorXt h(const VectorXt& state) const
+  {
     VectorXt observation(7);
     observation.middleRows(0, 3) = state.middleRows(0, 3);
     observation.middleRows(3, 4) = state.middleRows(6, 4).normalized();
@@ -128,6 +138,6 @@ public:
   double dt;
 };
 
-}
+}  // namespace hdl_localization
 
-#endif // POSE_SYSTEM_HPP
+#endif  // POSE_SYSTEM_HPP

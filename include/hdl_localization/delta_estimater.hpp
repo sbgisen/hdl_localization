@@ -6,24 +6,33 @@
 #include <pcl/point_cloud.h>
 #include <pcl/registration/registration.h>
 
-namespace hdl_localization {
+namespace hdl_localization
+{
 
-class DeltaEstimater {
+class DeltaEstimater
+{
 public:
   using PointT = pcl::PointXYZI;
 
-  DeltaEstimater(pcl::Registration<PointT, PointT>::Ptr reg): delta(Eigen::Isometry3f::Identity()), reg(reg) {}
-  ~DeltaEstimater() {}
+  DeltaEstimater(pcl::Registration<PointT, PointT>::Ptr reg) : delta(Eigen::Isometry3f::Identity()), reg(reg)
+  {
+  }
+  ~DeltaEstimater()
+  {
+  }
 
-  void reset() {
+  void reset()
+  {
     std::lock_guard<std::mutex> lock(mutex);
     delta.setIdentity();
     last_frame.reset();
   }
 
-  void add_frame(pcl::PointCloud<PointT>::ConstPtr frame) {
+  void add_frame(pcl::PointCloud<PointT>::ConstPtr frame)
+  {
     std::unique_lock<std::mutex> lock(mutex);
-    if (last_frame == nullptr) {
+    if (last_frame == nullptr)
+    {
       last_frame = frame;
       return;
     }
@@ -40,7 +49,8 @@ public:
     delta = delta * Eigen::Isometry3f(reg->getFinalTransformation());
   }
 
-  Eigen::Isometry3f estimated_delta() const {
+  Eigen::Isometry3f estimated_delta() const
+  {
     std::lock_guard<std::mutex> lock(mutex);
     return delta;
   }
@@ -53,7 +63,6 @@ private:
   pcl::PointCloud<PointT>::ConstPtr last_frame;
 };
 
-} // namespace hdl_localization
-
+}  // namespace hdl_localization
 
 #endif

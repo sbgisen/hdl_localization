@@ -23,23 +23,26 @@ struct EIGEN_ALIGN16 PointXYZRGBI
   PCL_ADD_INTENSITY;
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
-POINT_CLOUD_REGISTER_POINT_STRUCT(PointXYZRGBI, 
-                                  (float, x, x)(float, y, y)(float, z, z)
-                                  (float, rgb, rgb)
-                                  (float, intensity, intensity))
+POINT_CLOUD_REGISTER_POINT_STRUCT(PointXYZRGBI,
+                                  (float, x, x)(float, y, y)(float, z, z)(float, rgb, rgb)(float, intensity, intensity))
 
-namespace hdl_localization {
+namespace hdl_localization
+{
 
-class GlobalmapServerNodelet : public nodelet::Nodelet {
+class GlobalmapServerNodelet : public nodelet::Nodelet
+{
 public:
   using PointT = PointXYZRGBI;
 
-  GlobalmapServerNodelet() {
+  GlobalmapServerNodelet()
+  {
   }
-  virtual ~GlobalmapServerNodelet() {
+  virtual ~GlobalmapServerNodelet()
+  {
   }
 
-  void onInit() override {
+  void onInit() override
+  {
     nh = getNodeHandle();
     mt_nh = getMTNodeHandle();
     private_nh = getPrivateNodeHandle();
@@ -48,13 +51,15 @@ public:
 
     // publish globalmap with "latched" publisher
     globalmap_pub = nh.advertise<sensor_msgs::PointCloud2>("/globalmap", 5, true);
-    map_update_sub = nh.subscribe("/map_request/pcd", 10,              &GlobalmapServerNodelet::map_update_callback, this);
+    map_update_sub = nh.subscribe("/map_request/pcd", 10, &GlobalmapServerNodelet::map_update_callback, this);
 
-    globalmap_pub_timer = nh.createWallTimer(ros::WallDuration(1.0), &GlobalmapServerNodelet::pub_once_cb, this, true, true);
+    globalmap_pub_timer =
+        nh.createWallTimer(ros::WallDuration(1.0), &GlobalmapServerNodelet::pub_once_cb, this, true, true);
   }
 
 private:
-  void initialize_params() {
+  void initialize_params()
+  {
     // read globalmap from a pcd file
     std::string globalmap_pcd = private_nh.param<std::string>("globalmap_pcd", "");
     globalmap.reset(new pcl::PointCloud<PointT>());
@@ -62,12 +67,14 @@ private:
     globalmap->header.frame_id = "map";
 
     std::ifstream utm_file(globalmap_pcd + ".utm");
-    if (utm_file.is_open() && private_nh.param<bool>("convert_utm_to_local", true)) {
+    if (utm_file.is_open() && private_nh.param<bool>("convert_utm_to_local", true))
+    {
       double utm_easting;
       double utm_northing;
       double altitude;
       utm_file >> utm_easting >> utm_northing >> altitude;
-      for(auto& pt : globalmap->points) {
+      for (auto& pt : globalmap->points)
+      {
         pt.getVector3fMap() -= Eigen::Vector3f(utm_easting, utm_northing, altitude);
       }
       ROS_INFO_STREAM("Global map offset by UTM reference coordinates (x = "
@@ -86,12 +93,14 @@ private:
     globalmap = filtered;
   }
 
-  void pub_once_cb(const ros::WallTimerEvent& event) {
+  void pub_once_cb(const ros::WallTimerEvent& event)
+  {
     globalmap_pub.publish(globalmap);
   }
 
-  void map_update_callback(const std_msgs::String &msg){
-    ROS_INFO_STREAM("Received map request, map path : "<< msg.data);
+  void map_update_callback(const std_msgs::String& msg)
+  {
+    ROS_INFO_STREAM("Received map request, map path : " << msg.data);
     std::string globalmap_pcd = msg.data;
     globalmap.reset(new pcl::PointCloud<PointT>());
     pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
@@ -123,7 +132,6 @@ private:
   pcl::PointCloud<PointT>::Ptr globalmap;
 };
 
-}
-
+}  // namespace hdl_localization
 
 PLUGINLIB_EXPORT_CLASS(hdl_localization::GlobalmapServerNodelet, nodelet::Nodelet)
