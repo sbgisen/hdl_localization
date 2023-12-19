@@ -104,6 +104,7 @@ include_directories(${catkin_INCLUDE_DIRS})
 add_library(
   hdl_localization_nodelet
   src/hdl_localization/delta_estimator.cpp
+  src/hdl_localization/pose_system.cpp
   src/hdl_localization/pose_estimator.cpp
   src/nodelet/hdl_localization_nodelet.cpp
 )
