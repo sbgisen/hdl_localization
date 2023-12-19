@@ -36,7 +36,7 @@ public:
   using PointT = PointXYZRGBI;
 
   GlobalmapServerNodelet();
-  virtual ~GlobalmapServerNodelet();
+  ~GlobalmapServerNodelet() override;
   void onInit() override;
 
 private:

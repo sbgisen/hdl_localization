@@ -5,9 +5,13 @@
 #include <boost/optional.hpp>
 
 #include <ros/ros.h>
+#include <pcl/filters/voxel_grid.h>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 #include <pcl/registration/registration.h>
+
+#include <hdl_localization/pose_system.hpp>
+#include <ukf/unscented_kalman_filter.hpp>
 
 namespace kkl
 {

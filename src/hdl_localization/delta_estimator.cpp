@@ -1,4 +1,3 @@
-// hdl_localization_delta_estimator.cpp
 #include "hdl_localization/delta_estimator.hpp"
 
 namespace hdl_localization
