@@ -162,7 +162,7 @@ void HdlLocalizationNodelet::initializeParams()
   // global localization
   NODELET_INFO("create registration method for fallback during relocalization");
   relocalizing_ = false;
-  delta_estimater_.reset(new DeltaEstimater(createRegistration()));
+  delta_estimator_.reset(new DeltaEstimator(createRegistration()));
 
   // initialize pose estimator
   if (private_nh_.param<bool>("specify_init_pose", true))
@@ -239,7 +239,7 @@ void HdlLocalizationNodelet::pointsCallback(const sensor_msgs::PointCloud2ConstP
 
   if (relocalizing_)
   {
-    delta_estimater_->addFrame(filtered);
+    delta_estimator_->addFrame(filtered);
   }
 
   std::lock_guard<std::mutex> estimator_lock(pose_estimator_mutex_);
@@ -390,7 +390,7 @@ bool HdlLocalizationNodelet::relocalize(std_srvs::EmptyRequest& /*req*/, std_srv
   }
 
   relocalizing_ = true;
-  delta_estimater_->reset();
+  delta_estimator_->reset();
   pcl::PointCloud<HdlLocalizationNodelet::PointT>::ConstPtr scan = last_scan_;
 
   hdl_global_localization::QueryGlobalLocalization srv;
@@ -418,7 +418,7 @@ bool HdlLocalizationNodelet::relocalize(std_srvs::EmptyRequest& /*req*/, std_srv
       Eigen::Quaternionf(result.orientation.w, result.orientation.x, result.orientation.y, result.orientation.z)
           .toRotationMatrix();
   pose.translation() = Eigen::Vector3f(result.position.x, result.position.y, result.position.z);
-  pose = pose * delta_estimater_->estimatedDelta();
+  pose = pose * delta_estimator_->estimatedDelta();
 
   std::lock_guard<std::mutex> lock(pose_estimator_mutex_);
   pose_estimator_.reset(new hdl_localization::PoseEstimator(registration_, pose.translation(),

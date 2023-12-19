@@ -29,7 +29,7 @@
 #include <fast_gicp/ndt/ndt_cuda.hpp>
 
 #include <hdl_localization/pose_estimator.hpp>
-#include <hdl_localization/delta_estimater.hpp>
+#include <hdl_localization/delta_estimator.hpp>
 
 #include <hdl_localization/ScanMatchingStatus.h>
 #include <hdl_global_localization/SetGlobalMap.h>
@@ -103,7 +103,7 @@ private:
   // global localization
   bool use_global_localization_;
   std::atomic_bool relocalizing_;
-  std::unique_ptr<DeltaEstimater> delta_estimater_;
+  std::unique_ptr<DeltaEstimator> delta_estimator_;
 
   pcl::PointCloud<PointT>::ConstPtr last_scan_;
   ros::ServiceServer relocalize_server_;
