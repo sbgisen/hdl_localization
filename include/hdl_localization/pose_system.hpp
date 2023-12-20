@@ -3,27 +3,32 @@
 
 #include <kkl/alg/unscented_kalman_filter.hpp>
 
-namespace hdl_localization {
-
+namespace hdl_localization
+{
 /**
  * @brief Definition of system to be estimated by ukf
- * @note state = [px, py, pz, vx, vy, vz, qw, qx, qy, qz, acc_bias_x, acc_bias_y, acc_bias_z, gyro_bias_x, gyro_bias_y, gyro_bias_z]
+ * @note state = [px, py, pz, vx, vy, vz, qw, qx, qy, qz, acc_bias_x, acc_bias_y, acc_bias_z, gyro_bias_x, gyro_bias_y,
+ * gyro_bias_z]
  */
-class PoseSystem {
+class PoseSystem
+{
 public:
   typedef float T;
   typedef Eigen::Matrix<T, 3, 1> Vector3t;
   typedef Eigen::Matrix<T, 4, 4> Matrix4t;
   typedef Eigen::Matrix<T, Eigen::Dynamic, 1> VectorXt;
   typedef Eigen::Quaternion<T> Quaterniont;
+
 public:
-  PoseSystem() {
-    dt = 0.01;
+  PoseSystem()
+  {
+    dt_ = 0.01;
   }
 
   // system equation (without input)
-  VectorXt f(const VectorXt& state) const {
-    VectorXt next_state(16);
+  VectorXt f(const VectorXt& state) const
+  {
+    VectorXt state_next(16);
 
     Vector3t pt = state.middleRows(0, 3);
     Vector3t vt = state.middleRows(3, 3);
@@ -34,24 +39,23 @@ public:
     Vector3t gyro_bias = state.middleRows(13, 3);
 
     // position
-    next_state.middleRows(0, 3) = pt + vt * dt;  //
+    state_next.middleRows(0, 3) = pt + vt * dt_;  //
 
     // velocity
-    next_state.middleRows(3, 3) = vt;
+    state_next.middleRows(3, 3) = vt;
 
     // orientation
-    Quaterniont qt_ = qt;
+    state_next.middleRows(6, 4) << qt.w(), qt.x(), qt.y(), qt.z();
+    state_next.middleRows(10, 3) = state.middleRows(10, 3);  // constant bias on acceleration
+    state_next.middleRows(13, 3) = state.middleRows(13, 3);  // constant bias on angular velocity
 
-    next_state.middleRows(6, 4) << qt_.w(), qt_.x(), qt_.y(), qt_.z();
-    next_state.middleRows(10, 3) = state.middleRows(10, 3);  // constant bias on acceleration
-    next_state.middleRows(13, 3) = state.middleRows(13, 3);  // constant bias on angular velocity
-
-    return next_state;
+    return state_next;
   }
 
   // system equation
-  VectorXt f_imu(const VectorXt& state, const Eigen::Vector3f& imu_acc, const Eigen::Vector3f& imu_gyro) const {
-    VectorXt next_state(16);
+  VectorXt fImu(const VectorXt& state, const Eigen::Vector3f& imu_acc, const Eigen::Vector3f& imu_gyro) const
+  {
+    VectorXt state_next(16);
 
     Vector3t pt = state.middleRows(0, 3);
     Vector3t vt = state.middleRows(3, 3);
@@ -61,63 +65,66 @@ public:
     Vector3t acc_bias = state.middleRows(10, 3);
     Vector3t gyro_bias = state.middleRows(13, 3);
 
-    Vector3t raw_acc = imu_acc;
-    Vector3t raw_gyro = imu_gyro;
+    const Vector3t& raw_acc = imu_acc;
+    const Vector3t& raw_gyro = imu_gyro;
 
     // position
-    next_state.middleRows(0, 3) = pt + vt * dt;  //
+    state_next.middleRows(0, 3) = pt + vt * dt_;  //
 
     // velocity
     Vector3t g(0.0f, 0.0f, 9.80665f);
-    Vector3t acc_ = raw_acc - acc_bias;
-    Vector3t acc = qt * acc_;
-    next_state.middleRows(3, 3) = vt + (acc - g) * dt;
-    // next_state.middleRows(3, 3) = vt; // + (acc - g) * dt;		// acceleration didn't contribute to accuracy due to large noise
+    Vector3t acc = qt * (raw_acc - acc_bias);
+    state_next.middleRows(3, 3) = vt + (acc - g) * dt_;
+    // state_next.middleRows(3, 3) = vt; // + (acc - g) * dt_;		// acceleration didn't contribute to accuracy due to
+    // large noise
 
     // orientation
     Vector3t gyro = raw_gyro - gyro_bias;
-    Quaterniont dq(1, gyro[0] * dt / 2, gyro[1] * dt / 2, gyro[2] * dt / 2);
+    Quaterniont dq(1, gyro[0] * dt_ / 2, gyro[1] * dt_ / 2, gyro[2] * dt_ / 2);
     dq.normalize();
-    Quaterniont qt_ = (qt * dq).normalized();
-    next_state.middleRows(6, 4) << qt_.w(), qt_.x(), qt_.y(), qt_.z();
+    Quaterniont qt_next = (qt * dq).normalized();
+    state_next.middleRows(6, 4) << qt_next.w(), qt_next.x(), qt_next.y(), qt_next.z();
 
-    next_state.middleRows(10, 3) = state.middleRows(10, 3);  // constant bias on acceleration
-    next_state.middleRows(13, 3) = state.middleRows(13, 3);  // constant bias on angular velocity
+    state_next.middleRows(10, 3) = state.middleRows(10, 3);  // constant bias on acceleration
+    state_next.middleRows(13, 3) = state.middleRows(13, 3);  // constant bias on angular velocity
 
-    return next_state;
+    return state_next;
   }
 
-  VectorXt f_odom(const VectorXt& state, const Eigen::Vector3f& odom_twist_lin, const Eigen::Vector3f& odom_twist_ang) const {
-    VectorXt next_state(16);
+  VectorXt fOdom(const VectorXt& state, const Eigen::Vector3f& odom_twist_lin,
+                 const Eigen::Vector3f& odom_twist_ang) const
+  {
+    VectorXt state_next(16);
     Vector3t pt = state.middleRows(0, 3);
     Vector3t vt = state.middleRows(3, 3);
     Quaterniont qt(state[6], state[7], state[8], state[9]);
     qt.normalize();
 
-    Vector3t raw_lin_vel = odom_twist_lin;
-    Vector3t raw_ang_vel = odom_twist_ang;
+    Vector3t lin_vel_raw = odom_twist_lin;
+    Vector3t ang_vel_raw = odom_twist_ang;
 
     // position
-    next_state.middleRows(0, 3) = pt + vt * dt;
+    state_next.middleRows(0, 3) = pt + vt * dt_;
 
     // velocity
-    Vector3t vel = qt * raw_lin_vel;
-    next_state.middleRows(3, 3) = vel;
+    Vector3t vel = qt * lin_vel_raw;
+    state_next.middleRows(3, 3) = vel;
 
     // orientation
-    Quaterniont dq(1, raw_ang_vel[0] * dt / 2, raw_ang_vel[1] * dt / 2, raw_ang_vel[2] * dt / 2);
+    Quaterniont dq(1, ang_vel_raw[0] * dt_ / 2, ang_vel_raw[1] * dt_ / 2, ang_vel_raw[2] * dt_ / 2);
     dq.normalize();
-    Quaterniont qt_ = (qt * dq).normalized();
-    next_state.middleRows(6, 4) << qt_.w(), qt_.x(), qt_.y(), qt_.z();
+    Quaterniont qt_next = (qt * dq).normalized();
+    state_next.middleRows(6, 4) << qt_next.w(), qt_next.x(), qt_next.y(), qt_next.z();
 
-    next_state.middleRows(10, 3) = state.middleRows(10, 3);  // constant bias on acceleration
-    next_state.middleRows(13, 3) = state.middleRows(13, 3);  // constant bias on angular velocity
+    state_next.middleRows(10, 3) = state.middleRows(10, 3);  // constant bias on acceleration
+    state_next.middleRows(13, 3) = state.middleRows(13, 3);  // constant bias on angular velocity
 
-    return next_state;
+    return state_next;
   }
 
   // observation equation
-  VectorXt h(const VectorXt& state) const {
+  VectorXt h(const VectorXt& state) const
+  {
     VectorXt observation(7);
     observation.middleRows(0, 3) = state.middleRows(0, 3);
     observation.middleRows(3, 4) = state.middleRows(6, 4).normalized();
@@ -125,9 +132,9 @@ public:
     return observation;
   }
 
-  double dt;
+  double dt_;
 };
 
-}
+}  // namespace hdl_localization
 
-#endif // POSE_SYSTEM_HPP
+#endif  // POSE_SYSTEM_HPP
