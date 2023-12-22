@@ -151,10 +151,18 @@ void HdlLocalizationNodelet::initializeParams()
 {
   // intialize scan matching method
   double downsample_resolution = private_nh_.param<double>("downsample_resolution", 0.1);
-  boost::shared_ptr<pcl::VoxelGrid<HdlLocalizationNodelet::PointT>> voxelgrid(
-      new pcl::VoxelGrid<HdlLocalizationNodelet::PointT>());
-  voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
-  downsample_filter_ = voxelgrid;
+  if (downsample_resolution > std::numeric_limits<double>::epsilon())
+  {
+    boost::shared_ptr<pcl::VoxelGrid<HdlLocalizationNodelet::PointT>> voxelgrid(
+        new pcl::VoxelGrid<HdlLocalizationNodelet::PointT>());
+    voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
+    downsample_filter_ = voxelgrid;
+  }
+  else
+  {
+    ROS_WARN("Input downsample_filter_ is disabled");
+    downsample_filter_.reset();
+  }
 
   NODELET_INFO("create registration method for localization");
   registration_ = createRegistration();
