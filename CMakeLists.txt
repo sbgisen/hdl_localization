@@ -101,7 +101,13 @@ include_directories(include)
 include_directories(${catkin_INCLUDE_DIRS})
 
 # nodelets
-add_library(hdl_localization_nodelet src/hdl_localization/pose_estimator.cpp apps/hdl_localization_nodelet.cpp)
+add_library(
+  hdl_localization_nodelet
+  src/hdl_localization/delta_estimator.cpp
+  src/hdl_localization/pose_system.cpp
+  src/hdl_localization/pose_estimator.cpp
+  src/nodelet/hdl_localization_nodelet.cpp
+)
 target_link_libraries(
   hdl_localization_nodelet
   ${catkin_LIBRARIES}
@@ -109,7 +115,7 @@ target_link_libraries(
 )
 add_dependencies(hdl_localization_nodelet ${PROJECT_NAME}_gencpp)
 
-add_library(globalmap_server_nodelet apps/globalmap_server_nodelet.cpp)
+add_library(globalmap_server_nodelet src/nodelet/globalmap_server_nodelet.cpp)
 target_link_libraries(
   globalmap_server_nodelet
   ${catkin_LIBRARIES}
