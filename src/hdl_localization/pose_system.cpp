@@ -89,6 +89,7 @@ PoseSystem::VectorXt PoseSystem::fOdom(const VectorXt& state, const Eigen::Vecto
   dq = Eigen::AngleAxisf(odom_twist_ang[0] * dt_, Vector3t::UnitX()) *
        Eigen::AngleAxisf(odom_twist_ang[1] * dt_, Vector3t::UnitY()) *
        Eigen::AngleAxisf(odom_twist_ang[2] * dt_, Vector3t::UnitZ());
+  dq.normalize();
   Quaterniont qt_next = (qt * dq).normalized();
   state_next.middleRows(6, 4) << qt_next.w(), qt_next.x(), qt_next.y(), qt_next.z();
   state_next.middleRows(10, 3) = state.middleRows(10, 3);  // constant bias on acceleration
