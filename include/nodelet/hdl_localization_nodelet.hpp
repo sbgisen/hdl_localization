@@ -65,11 +65,12 @@ private:
   ros::NodeHandle mt_nh_;
   ros::NodeHandle private_nh_;
 
+  std::string global_frame_id_;
+  std::string odom_frame_id_;
+  std::string base_frame_id_;
+  bool tf_broadcast_;
   bool use_odom_;
   ros::Time odom_stamp_last_;
-  std::string robot_odom_frame_id_;
-  std::string odom_child_frame_id_;
-  bool enable_tf_;
 
   bool use_imu_;
   bool invert_acc_;

@@ -6,15 +6,16 @@
   <!-- input clouds are transformed in odom_child_frame, and then localization is performed in that
   frame -->
   <!-- this is useful to match the LIDAR and IMU coodinate systems -->
-  <arg name="odom_child_frame_id" default="velodyne"/>
+  <arg name="base_frame_id" default="velodyne"/>
+  <arg name="global_frame_id" value="map"/>
   <!-- optional arguments -->
   <arg name="use_imu" default="false"/>
+  <arg name="use_odom" value="false"/>
   <arg name="invert_imu_acc" default="false"/>
   <arg name="invert_imu_gyro" default="false"/>
   <arg name="use_global_localization" default="true"/>
   <arg name="imu_topic" default="/imu/data"/>
-  <arg name="enable_robot_odometry_prediction" value="false"/>
-  <arg name="robot_odom_frame_id" value="odom"/>
+  <arg name="odom_frame_id" value="odom"/>
   <arg name="plot_estimation_errors" value="false"/>
   <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch"
     if="$(arg use_global_localization)"/>
@@ -24,6 +25,7 @@
   <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet"
     args="load hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)">
     <param name="globalmap_pcd" value="$(find hdl_localization)/data/map.pcd"/>
+    <param name="global_frame_id" value="$(arg global_frame_id)"/>
     <param name="convert_utm_to_local" value="true"/>
     <param name="downsample_resolution" value="0.1"/>
   </node>
@@ -33,7 +35,8 @@
     <remap from="/velodyne_points" to="$(arg points_topic)"/>
     <remap from="/gpsimu_driver/imu_data" to="$(arg imu_topic)"/>
     <!-- odometry frame_id -->
-    <param name="odom_child_frame_id" value="$(arg odom_child_frame_id)"/>
+    <param name="base_frame_id" value="$(arg base_frame_id)"/>
+    <param name="global_frame_id" value="$(arg global_frame_id)"/>
     <!-- imu settings -->
     <!-- during "cool_time", imu inputs are ignored -->
     <param name="use_imu" value="$(arg use_imu)"/>
@@ -41,8 +44,8 @@
     <param name="invert_gyro" value="$(arg invert_imu_gyro)"/>
     <param name="cool_time_duration" value="2.0"/>
     <!-- robot odometry-based prediction -->
-    <param name="enable_robot_odometry_prediction" value="$(arg enable_robot_odometry_prediction)"/>
-    <param name="robot_odom_frame_id" value="$(arg robot_odom_frame_id)"/>
+    <param name="use_odom" value="$(arg use_odom)"/>
+    <param name="odom_frame_id" value="$(arg odom_frame_id)"/>
     <!-- ndt settings -->
     <!-- available reg_methods: NDT_OMP, NDT_CUDA_P2D, NDT_CUDA_D2D-->
     <param name="reg_method" value="NDT_OMP"/>
@@ -63,12 +66,12 @@
     <param name="init_ori_x" value="0.0"/>
     <param name="init_ori_y" value="0.0"/>
     <param name="init_ori_z" value="0.0"/>
-    <param name="cov_scaling_factor_x" value="1.0"/>
-    <param name="cov_scaling_factor_y" value="1.0"/>
-    <param name="cov_scaling_factor_z" value="1.0"/>
-    <param name="cov_scaling_factor_R" value="1.0"/>
-    <param name="cov_scaling_factor_P" value="1.0"/>
-    <param name="cov_scaling_factor_Y" value="1.0"/>
+    <param name="cov_scale_x" value="1.0"/>
+    <param name="cov_scale_y" value="1.0"/>
+    <param name="cov_scale_z" value="1.0"/>
+    <param name="cov_scale_roll" value="1.0"/>
+    <param name="cov_scale_pitch" value="1.0"/>
+    <param name="cov_scale_yaw" value="1.0"/>
     <param name="use_global_localization" value="$(arg use_global_localization)"/>
   </node>
   <node pkg="hdl_localization" type="plot_status.py" name="plot_estimation_errors"

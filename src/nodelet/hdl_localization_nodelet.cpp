@@ -19,11 +19,11 @@ void HdlLocalizationNodelet::onInit()
 
   initializeParams();
 
-  use_odom_ = private_nh_.param<bool>("enable_robot_odometry_prediction", false);
-  robot_odom_frame_id_ = private_nh_.param<std::string>("robot_odom_frame_id", "robot_odom");
-  odom_child_frame_id_ = private_nh_.param<std::string>("odom_child_frame_id", "base_link");
-  enable_tf_ = private_nh_.param<bool>("enable_tf", true);
-
+  global_frame_id_ = private_nh_.param<std::string>("global_frame_id", "map");
+  odom_frame_id_ = private_nh_.param<std::string>("odom_frame_id", "odom");
+  base_frame_id_ = private_nh_.param<std::string>("base_frame_id", "base_link");
+  tf_broadcast_ = private_nh_.param<bool>("tf_broadcast", true);
+  use_odom_ = private_nh_.param<bool>("use_odom", false);
   use_imu_ = private_nh_.param<bool>("use_imu", true);
   if (use_odom_ && use_imu_)
   {
@@ -227,10 +227,9 @@ void HdlLocalizationNodelet::pointsCallback(const sensor_msgs::PointCloud2ConstP
   // transform pointcloud into odom_child_frame_id
   std::string tf_error;
   pcl::PointCloud<HdlLocalizationNodelet::PointT>::Ptr cloud(new pcl::PointCloud<HdlLocalizationNodelet::PointT>());
-  if (this->tf_buffer_.canTransform(odom_child_frame_id_, pcl_cloud->header.frame_id, stamp, ros::Duration(0.1),
-                                    &tf_error))
+  if (this->tf_buffer_.canTransform(base_frame_id_, pcl_cloud->header.frame_id, stamp, ros::Duration(0.1), &tf_error))
   {
-    if (!pcl_ros::transformPointCloud(odom_child_frame_id_, *pcl_cloud, *cloud, this->tf_buffer_))
+    if (!pcl_ros::transformPointCloud(base_frame_id_, *pcl_cloud, *cloud, this->tf_buffer_))
     {
       NODELET_ERROR("point cloud cannot be transformed into target frame!!");
       return;
@@ -281,17 +280,16 @@ void HdlLocalizationNodelet::pointsCallback(const sensor_msgs::PointCloud2ConstP
   else if (use_odom_)
   {
     // PointClouds + Oodometry prediction
-    if (tf_buffer_.canTransform(odom_child_frame_id_, odom_stamp_last_, odom_child_frame_id_, ros::Time(0),
-                                robot_odom_frame_id_, ros::Duration(0)))
+    if (tf_buffer_.canTransform(base_frame_id_, odom_stamp_last_, base_frame_id_, ros::Time(0), odom_frame_id_,
+                                ros::Duration(0)))
     {
       // Get the amount of odometry movement since the last calculation
       // Coordinate system where the front of the robot is x
-      geometry_msgs::TransformStamped odom_delta =
-          tf_buffer_.lookupTransform(odom_child_frame_id_, odom_stamp_last_, odom_child_frame_id_, ros::Time(0),
-                                     robot_odom_frame_id_, ros::Duration(0));
+      geometry_msgs::TransformStamped odom_delta = tf_buffer_.lookupTransform(
+          base_frame_id_, odom_stamp_last_, base_frame_id_, ros::Time(0), odom_frame_id_, ros::Duration(0));
       // Get the latest odom_child_frame_id to get the time
       geometry_msgs::TransformStamped odom_now =
-          tf_buffer_.lookupTransform(robot_odom_frame_id_, odom_child_frame_id_, ros::Time(0));
+          tf_buffer_.lookupTransform(odom_frame_id_, base_frame_id_, ros::Time(0));
       ros::Time odom_stamp = odom_now.header.stamp;
       ros::Duration odom_time_diff = odom_stamp - odom_stamp_last_;
       double odom_time_diff_sec = odom_time_diff.toSec();
@@ -316,18 +314,18 @@ void HdlLocalizationNodelet::pointsCallback(const sensor_msgs::PointCloud2ConstP
     }
     else
     {
-      if (tf_buffer_.canTransform(robot_odom_frame_id_, odom_child_frame_id_, ros::Time(0)))
+      if (tf_buffer_.canTransform(odom_frame_id_, base_frame_id_, ros::Time(0)))
       {
         NODELET_WARN_STREAM("The last timestamp is wrong, skip localization");
         // Get the latest odom_child_frame_id to get the time
         geometry_msgs::TransformStamped odom_now =
-            tf_buffer_.lookupTransform(robot_odom_frame_id_, odom_child_frame_id_, ros::Time(0));
+            tf_buffer_.lookupTransform(odom_frame_id_, base_frame_id_, ros::Time(0));
         odom_stamp_last_ = odom_now.header.stamp;
       }
       else
       {
         NODELET_WARN_STREAM("Failed to look up transform between " << cloud->header.frame_id << " and "
-                                                                   << robot_odom_frame_id_);
+                                                                   << odom_frame_id_);
       }
     }
   }
@@ -342,7 +340,7 @@ void HdlLocalizationNodelet::pointsCallback(const sensor_msgs::PointCloud2ConstP
 
   if (aligned_pub_.getNumSubscribers())
   {
-    aligned->header.frame_id = "map";
+    aligned->header.frame_id = global_frame_id_;
     aligned->header.stamp = cloud->header.stamp;
     aligned_pub_.publish(aligned);
   }
@@ -483,18 +481,18 @@ void HdlLocalizationNodelet::publishOdometry(const ros::Time& stamp, const Eigen
                                              const double fitness_score)
 {
   // broadcast the transform over tf
-  if (enable_tf_)
+  if (tf_broadcast_)
   {
-    if (tf_buffer_.canTransform(robot_odom_frame_id_, odom_child_frame_id_, ros::Time(0)))
+    if (tf_buffer_.canTransform(odom_frame_id_, base_frame_id_, ros::Time(0)))
     {
       geometry_msgs::TransformStamped map_wrt_frame =
           tf2::eigenToTransform(Eigen::Isometry3d(pose.inverse().cast<double>()));
       map_wrt_frame.header.stamp = stamp;
-      map_wrt_frame.header.frame_id = odom_child_frame_id_;
-      map_wrt_frame.child_frame_id = "map";
+      map_wrt_frame.header.frame_id = base_frame_id_;
+      map_wrt_frame.child_frame_id = global_frame_id_;
 
       geometry_msgs::TransformStamped frame_wrt_odom =
-          tf_buffer_.lookupTransform(robot_odom_frame_id_, odom_child_frame_id_, ros::Time(0), ros::Duration(0.1));
+          tf_buffer_.lookupTransform(odom_frame_id_, base_frame_id_, ros::Time(0), ros::Duration(0.1));
       Eigen::Matrix4f frame2odom = tf2::transformToEigen(frame_wrt_odom).cast<float>().matrix();
 
       geometry_msgs::TransformStamped map_wrt_odom;
@@ -507,8 +505,8 @@ void HdlLocalizationNodelet::publishOdometry(const ros::Time& stamp, const Eigen
       geometry_msgs::TransformStamped odom_trans;
       odom_trans.transform = tf2::toMsg(odom_wrt_map);
       odom_trans.header.stamp = stamp;
-      odom_trans.header.frame_id = "map";
-      odom_trans.child_frame_id = robot_odom_frame_id_;
+      odom_trans.header.frame_id = global_frame_id_;
+      odom_trans.child_frame_id = odom_frame_id_;
 
       tf_broadcaster_.sendTransform(odom_trans);
     }
@@ -516,8 +514,8 @@ void HdlLocalizationNodelet::publishOdometry(const ros::Time& stamp, const Eigen
     {
       geometry_msgs::TransformStamped odom_trans = tf2::eigenToTransform(Eigen::Isometry3d(pose.cast<double>()));
       odom_trans.header.stamp = stamp;
-      odom_trans.header.frame_id = "map";
-      odom_trans.child_frame_id = odom_child_frame_id_;
+      odom_trans.header.frame_id = global_frame_id_;
+      odom_trans.child_frame_id = base_frame_id_;
       tf_broadcaster_.sendTransform(odom_trans);
     }
   }
@@ -525,17 +523,17 @@ void HdlLocalizationNodelet::publishOdometry(const ros::Time& stamp, const Eigen
   // publish the transform
   nav_msgs::Odometry odom;
   odom.header.stamp = stamp;
-  odom.header.frame_id = "map";
+  odom.header.frame_id = global_frame_id_;
 
   tf::poseEigenToMsg(Eigen::Isometry3d(pose.cast<double>()), odom.pose.pose);
-  odom.pose.covariance[0] = private_nh_.param<double>("cov_scaling_factor_x", 1.0) * fitness_score;
-  odom.pose.covariance[7] = private_nh_.param<double>("cov_scaling_factor_y", 1.0) * fitness_score;
-  odom.pose.covariance[14] = private_nh_.param<double>("cov_scaling_factor_z", 1.0) * fitness_score;
-  odom.pose.covariance[21] = private_nh_.param<double>("cov_scaling_factor_R", 1.0) * fitness_score;
-  odom.pose.covariance[28] = private_nh_.param<double>("cov_scaling_factor_P", 1.0) * fitness_score;
-  odom.pose.covariance[35] = private_nh_.param<double>("cov_scaling_factor_Y", 1.0) * fitness_score;
+  odom.pose.covariance[0] = private_nh_.param<double>("cov_scale_x", 1.0) * fitness_score;
+  odom.pose.covariance[7] = private_nh_.param<double>("cov_scale_y", 1.0) * fitness_score;
+  odom.pose.covariance[14] = private_nh_.param<double>("cov_scale_z", 1.0) * fitness_score;
+  odom.pose.covariance[21] = private_nh_.param<double>("cov_scale_roll", 1.0) * fitness_score;
+  odom.pose.covariance[28] = private_nh_.param<double>("cov_scale_pitch", 1.0) * fitness_score;
+  odom.pose.covariance[35] = private_nh_.param<double>("cov_scale_yaw", 1.0) * fitness_score;
 
-  odom.child_frame_id = odom_child_frame_id_;
+  odom.child_frame_id = base_frame_id_;
   odom.twist.twist.linear.x = 0.0;
   odom.twist.twist.linear.y = 0.0;
   odom.twist.twist.angular.z = 0.0;
