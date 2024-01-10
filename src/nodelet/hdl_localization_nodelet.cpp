@@ -158,43 +158,6 @@ HdlLocalizationNodelet::createRegistration() const
     }
     return ndt;
   }
-  else if (reg_method.find("NDT_CUDA") != std::string::npos)
-  {
-    NODELET_INFO("NDT_CUDA is selected");
-    boost::shared_ptr<fast_gicp::NDTCuda<HdlLocalizationNodelet::PointT, HdlLocalizationNodelet::PointT>> ndt(
-        new fast_gicp::NDTCuda<HdlLocalizationNodelet::PointT, HdlLocalizationNodelet::PointT>);
-    ndt->setResolution(ndt_resolution);
-
-    if (reg_method.find("D2D") != std::string::npos)
-    {
-      ndt->setDistanceMode(fast_gicp::NDTDistanceMode::D2D);
-    }
-    else if (reg_method.find("P2D") != std::string::npos)
-    {
-      ndt->setDistanceMode(fast_gicp::NDTDistanceMode::P2D);
-    }
-
-    if (ndt_neighbor_search_method == "DIRECT1")
-    {
-      NODELET_INFO("search_method DIRECT1 is selected");
-      ndt->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT1);
-    }
-    else if (ndt_neighbor_search_method == "DIRECT7")
-    {
-      NODELET_INFO("search_method DIRECT7 is selected");
-      ndt->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT7);
-    }
-    else if (ndt_neighbor_search_method == "DIRECT_RADIUS")
-    {
-      NODELET_INFO_STREAM("search_method DIRECT_RADIUS is selected : " << ndt_neighbor_search_radius);
-      ndt->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT_RADIUS, ndt_neighbor_search_radius);
-    }
-    else
-    {
-      NODELET_WARN("invalid search method was given");
-    }
-    return ndt;
-  }
 
   NODELET_ERROR_STREAM("unknown registration method:" << reg_method);
   return nullptr;
