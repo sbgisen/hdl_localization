@@ -55,11 +55,8 @@ PoseSystem::VectorXt PoseSystem::fImu(const VectorXt& state, const Eigen::Vector
 
   // orientation
   Vector3t gyro = imu_gyro - gyro_bias;
-  Quaterniont dq;
-  dq = Eigen::AngleAxisf(gyro[0] * dt_, Vector3t::UnitX()) * Eigen::AngleAxisf(gyro[1] * dt_, Vector3t::UnitY()) *
-       Eigen::AngleAxisf(gyro[2] * dt_, Vector3t::UnitZ());
-  dq.normalize();
-  Quaterniont qt_next = (qt * dq).normalized();
+  Quaterniont dq = Quaterniont(0, gyro[0] * dt_ / 2.0, gyro[1] * dt_ / 2.0, gyro[2] * dt_ / 2.0) * qt;
+  Quaterniont qt_next = Quaterniont(qt.w() + dq.w(), qt.x() + dq.x(), qt.y() + dq.y(), qt.z() + dq.z()).normalized();
   state_next.middleRows(6, 4) << qt_next.w(), qt_next.x(), qt_next.y(), qt_next.z();
   state_next.middleRows(10, 3) = state.middleRows(10, 3);  // constant bias on acceleration
   state_next.middleRows(13, 3) = state.middleRows(13, 3);  // constant bias on angular velocity
@@ -85,12 +82,9 @@ PoseSystem::VectorXt PoseSystem::fOdom(const VectorXt& state, const Eigen::Vecto
   state_next.middleRows(3, 3) = vt_next;
 
   // orientation
-  Quaterniont dq;
-  dq = Eigen::AngleAxisf(odom_twist_ang[0] * dt_, Vector3t::UnitX()) *
-       Eigen::AngleAxisf(odom_twist_ang[1] * dt_, Vector3t::UnitY()) *
-       Eigen::AngleAxisf(odom_twist_ang[2] * dt_, Vector3t::UnitZ());
-  dq.normalize();
-  Quaterniont qt_next = (qt * dq).normalized();
+  Quaterniont dq =
+      Quaterniont(0, odom_twist_ang[0] * dt_ / 2.0, odom_twist_ang[1] * dt_ / 2.0, odom_twist_ang[2] * dt_ / 2.0) * qt;
+  Quaterniont qt_next = Quaterniont(qt.w() + dq.w(), qt.x() + dq.x(), qt.y() + dq.y(), qt.z() + dq.z()).normalized();
   state_next.middleRows(6, 4) << qt_next.w(), qt_next.x(), qt_next.y(), qt_next.z();
   state_next.middleRows(10, 3) = state.middleRows(10, 3);  // constant bias on acceleration
   state_next.middleRows(13, 3) = state.middleRows(13, 3);  // constant bias on angular velocity
