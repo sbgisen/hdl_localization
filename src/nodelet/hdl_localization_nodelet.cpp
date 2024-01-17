@@ -36,6 +36,7 @@ void HdlLocalizationNodelet::onInit()
   bool specify_init_pose = private_nh_.param<bool>("specify_init_pose", false);
   Eigen::Vector3f init_position = Eigen::Vector3f::Zero();
   Eigen::Quaternionf init_orientation = Eigen::Quaternionf::Identity();
+  init_with_tf_ = private_nh_.param<bool>("init_with_tf", true);
   if (specify_init_pose)
   {
     init_position.x() = private_nh_.param<double>("init_pos_x", 0.0);
@@ -45,6 +46,38 @@ void HdlLocalizationNodelet::onInit()
     init_orientation.y() = private_nh_.param<double>("init_ori_y", 0.0);
     init_orientation.z() = private_nh_.param<double>("init_ori_z", 0.0);
     init_orientation.w() = private_nh_.param<double>("init_ori_w", 1.0);
+  }
+  else if (init_with_tf_)
+  {
+    if (!tf_broadcast_ && tf_buffer_.canTransform(global_frame_id_, base_frame_id_, ros::Time(0), ros::Duration(2.0)))
+    {
+      // If global frame and base frame already exist, initial position is set to keep the relative position
+      geometry_msgs::TransformStamped tf_map2base =
+          tf_buffer_.lookupTransform(global_frame_id_, base_frame_id_, ros::Time(0));
+      init_position = Eigen::Vector3f(tf_map2base.transform.translation.x, tf_map2base.transform.translation.y,
+                                      tf_map2base.transform.translation.z);
+      init_orientation = Eigen::Quaternionf(tf_map2base.transform.rotation.w, tf_map2base.transform.rotation.x,
+                                            tf_map2base.transform.rotation.y, tf_map2base.transform.rotation.z);
+      NODELET_INFO("global frame(%s) and base frame(%s) exist, use them for initial pose", global_frame_id_.c_str(),
+                   base_frame_id_.c_str());
+    }
+    else if (use_odom_ && tf_buffer_.canTransform(odom_frame_id_, base_frame_id_, ros::Time(0), ros::Duration(2.0)))
+    {
+      // If there is no global frame, also check the odom frame
+      geometry_msgs::TransformStamped tf_odom2base =
+          tf_buffer_.lookupTransform(odom_frame_id_, base_frame_id_, ros::Time(0));
+      init_position = Eigen::Vector3f(tf_odom2base.transform.translation.x, tf_odom2base.transform.translation.y,
+                                      tf_odom2base.transform.translation.z);
+      init_orientation = Eigen::Quaternionf(tf_odom2base.transform.rotation.w, tf_odom2base.transform.rotation.x,
+                                            tf_odom2base.transform.rotation.y, tf_odom2base.transform.rotation.z);
+      NODELET_INFO("global frame(%s) does not exist, use odom frame(%s) instead", global_frame_id_.c_str(),
+                   odom_frame_id_.c_str());
+    }
+    else
+    {
+      NODELET_WARN("global frame(%s) and odom frame(%s) do not exist, skip initialization", global_frame_id_.c_str(),
+                   odom_frame_id_.c_str());
+    }
   }
   // Initialize pose estimator
   NODELET_INFO("initialize pose estimator with specified parameters!!");
@@ -460,6 +493,40 @@ bool HdlLocalizationNodelet::relocalize(std_srvs::EmptyRequest& /*req*/, std_srv
 void HdlLocalizationNodelet::initialposeCallback(const geometry_msgs::PoseWithCovarianceStampedConstPtr& pose_msg)
 {
   NODELET_INFO("initialpose received");
+  // initialize tf_global2rviz on origin
+  geometry_msgs::TransformStamped tf_global2rviz;
+  tf_global2rviz.transform.translation.x = 0.0;
+  tf_global2rviz.transform.translation.y = 0.0;
+  tf_global2rviz.transform.translation.z = 0.0;
+  tf_global2rviz.transform.rotation.x = 0.0;
+  tf_global2rviz.transform.rotation.y = 0.0;
+  tf_global2rviz.transform.rotation.z = 0.0;
+  tf_global2rviz.transform.rotation.w = 1.0;
+  // If the origin of rviz and the global(map) frame are different, coordinate transformation is performed
+  if (init_with_tf_ && global_frame_id_ != pose_msg->header.frame_id && !global_frame_id_.empty() &&
+      !pose_msg->header.frame_id.empty())
+  {
+    tf_global2rviz =
+        tf_buffer_.lookupTransform(global_frame_id_, pose_msg->header.frame_id, ros::Time(0), ros::Duration(2.0));
+    if (tf_global2rviz.header.frame_id != global_frame_id_)
+    {
+      ROS_ERROR("[Failed to get transform from %s to %s", global_frame_id_.c_str(), pose_msg->header.frame_id.c_str());
+    }
+  }
+  tf2::Vector3 vec_rviz2robot(pose_msg->pose.pose.position.x, pose_msg->pose.pose.position.y,
+                              pose_msg->pose.pose.position.z);
+  tf2::Quaternion q_rviz2robot(pose_msg->pose.pose.orientation.x, pose_msg->pose.pose.orientation.y,
+                               pose_msg->pose.pose.orientation.z, pose_msg->pose.pose.orientation.w);
+  // Get initial pose from global to robot
+  tf2::Vector3 vec_global2rviz(tf_global2rviz.transform.translation.x, tf_global2rviz.transform.translation.y,
+                               tf_global2rviz.transform.translation.z);
+  tf2::Quaternion q_global2rviz(tf_global2rviz.transform.rotation.x, tf_global2rviz.transform.rotation.y,
+                                tf_global2rviz.transform.rotation.z, tf_global2rviz.transform.rotation.w);
+  tf2::Vector3 vec_global2robot = vec_global2rviz + (tf2::Matrix3x3(q_global2rviz) * vec_rviz2robot);
+  tf2::Quaternion q_global2robot = q_global2rviz * q_rviz2robot;
+  Eigen::Vector3f init_position = Eigen::Vector3f(vec_global2robot.x(), vec_global2robot.y(), vec_global2robot.z());
+  Eigen::Quaternionf init_orientation =
+      Eigen::Quaternionf(q_global2robot.w(), q_global2robot.x(), q_global2robot.y(), q_global2robot.z());
   if (use_odom_)
   {
     odom_stamp_last_ = pose_msg->header.stamp;
@@ -470,10 +537,8 @@ void HdlLocalizationNodelet::initialposeCallback(const geometry_msgs::PoseWithCo
     imu_data_.clear();
   }
   std::lock_guard<std::mutex> lock(pose_estimator_mutex_);
-  const auto& p = pose_msg->pose.pose.position;
-  const auto& q = pose_msg->pose.pose.orientation;
-  pose_estimator_.reset(new hdl_localization::PoseEstimator(
-      registration_, Eigen::Vector3f(p.x, p.y, p.z), Eigen::Quaternionf(q.w, q.x, q.y, q.z), cool_time_duration_));
+  pose_estimator_.reset(
+      new hdl_localization::PoseEstimator(registration_, init_position, init_orientation, cool_time_duration_));
 }
 
 /**
