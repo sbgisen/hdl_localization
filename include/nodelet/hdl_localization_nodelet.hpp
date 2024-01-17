@@ -72,6 +72,7 @@ private:
   bool tf_broadcast_;
   double cool_time_duration_;
   bool use_odom_;
+  bool init_with_tf_;
   ros::Time odom_stamp_last_;
 
   bool use_imu_;
