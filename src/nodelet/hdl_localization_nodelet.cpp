@@ -34,13 +34,13 @@ void HdlLocalizationNodelet::onInit()
   invert_acc_ = private_nh_.param<bool>("invert_acc", false);
   invert_gyro_ = private_nh_.param<bool>("invert_gyro", false);
   bool specify_init_pose = private_nh_.param<bool>("specify_init_pose", false);
-  Eigen::Vector3f init_pose = Eigen::Vector3f::Zero();
+  Eigen::Vector3f init_position = Eigen::Vector3f::Zero();
   Eigen::Quaternionf init_orientation = Eigen::Quaternionf::Identity();
   if (specify_init_pose)
   {
-    init_pose.x() = private_nh_.param<double>("init_pos_x", 0.0);
-    init_pose.y() = private_nh_.param<double>("init_pos_y", 0.0);
-    init_pose.z() = private_nh_.param<double>("init_pos_z", 0.0);
+    init_position.x() = private_nh_.param<double>("init_pos_x", 0.0);
+    init_position.y() = private_nh_.param<double>("init_pos_y", 0.0);
+    init_position.z() = private_nh_.param<double>("init_pos_z", 0.0);
     init_orientation.x() = private_nh_.param<double>("init_ori_x", 0.0);
     init_orientation.y() = private_nh_.param<double>("init_ori_y", 0.0);
     init_orientation.z() = private_nh_.param<double>("init_ori_z", 0.0);
@@ -49,7 +49,7 @@ void HdlLocalizationNodelet::onInit()
   // Initialize pose estimator
   NODELET_INFO("initialize pose estimator with specified parameters!!");
   pose_estimator_.reset(
-      new hdl_localization::PoseEstimator(registration_, init_pose, init_orientation, cool_time_duration_));
+      new hdl_localization::PoseEstimator(registration_, init_position, init_orientation, cool_time_duration_));
 
   // Initialize subscriber and publisher
   if (use_imu_)
