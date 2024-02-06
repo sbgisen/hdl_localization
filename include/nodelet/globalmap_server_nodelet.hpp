@@ -49,6 +49,7 @@ private:
   ros::NodeHandle mt_nh_;
   ros::NodeHandle private_nh_;
 
+  std::string global_frame_id_;
   ros::Publisher globalmap_pub_;
   ros::Subscriber map_update_sub_;
 

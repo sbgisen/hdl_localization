@@ -30,9 +30,10 @@ void GlobalmapServerNodelet::initializeParams()
 {
   // read globalmap from a pcd file
   std::string globalmap_pcd = private_nh_.param<std::string>("globalmap_pcd", "");
+  global_frame_id_ = private_nh_.param<std::string>("global_frame_id", "map");
   globalmap_.reset(new pcl::PointCloud<PointT>());
   pcl::io::loadPCDFile(globalmap_pcd, *globalmap_);
-  globalmap_->header.frame_id = "map";
+  globalmap_->header.frame_id = global_frame_id_;
 
   std::ifstream utm_file(globalmap_pcd + ".utm");
   if (utm_file.is_open() && private_nh_.param<bool>("convert_utm_to_local", true))
@@ -76,7 +77,7 @@ void GlobalmapServerNodelet::mapUpdateCallback(const std_msgs::String& msg)
   std::string globalmap_pcd = msg.data;
   globalmap_.reset(new pcl::PointCloud<PointT>());
   pcl::io::loadPCDFile(globalmap_pcd, *globalmap_);
-  globalmap_->header.frame_id = "map";
+  globalmap_->header.frame_id = global_frame_id_;
   // downsample globalmap
   double downsample_resolution = private_nh_.param<double>("downsample_resolution", 0.1);
   if (downsample_resolution > std::numeric_limits<double>::epsilon())

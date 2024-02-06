@@ -9,13 +9,14 @@ namespace hdl_localization
  * @param quat                initial orientation
  * @param cool_time_duration  during "cool time", prediction is not performed
  */
-PoseEstimator::PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& registration, const Eigen::Vector3f& pos,
-                             const Eigen::Quaternionf& quat, double cool_time_duration)
+PoseEstimator::PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& registration,
+                             const Eigen::Vector3f& initial_position, const Eigen::Quaternionf& initial_orientation,
+                             double cool_time_duration)
   : registration_(registration), cool_time_duration_(cool_time_duration)
 {
   last_observation_ = Eigen::Matrix4f::Identity();
-  last_observation_.block<3, 3>(0, 0) = quat.toRotationMatrix();
-  last_observation_.block<3, 1>(0, 3) = pos;
+  last_observation_.block<3, 3>(0, 0) = initial_orientation.toRotationMatrix();
+  last_observation_.block<3, 1>(0, 3) = initial_position;
 
   process_noise_ = Eigen::MatrixXf::Identity(16, 16);
   process_noise_.middleRows(0, 3) *= 1.0;
@@ -29,9 +30,11 @@ PoseEstimator::PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& registratio
   measurement_noise.middleRows(3, 4) *= 0.001;
 
   Eigen::VectorXf mean(16);
-  mean.middleRows(0, 3) = pos;
+  mean.middleRows(0, 3) = initial_position;
   mean.middleRows(3, 3).setZero();
-  mean.middleRows(6, 4) = Eigen::Vector4f(quat.w(), quat.x(), quat.y(), quat.z()).normalized();
+  mean.middleRows(6, 4) = Eigen::Vector4f(initial_orientation.w(), initial_orientation.x(), initial_orientation.y(),
+                                          initial_orientation.z())
+                              .normalized();
   mean.middleRows(10, 3).setZero();
   mean.middleRows(13, 3).setZero();
 
@@ -169,8 +172,7 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
 
   wo_pred_error_ = no_guess.inverse() * registration_->getFinalTransformation();
   ukf_->correct(observation);
-  imu_pred_error_ = init_guess.inverse() * registration_->getFinalTransformation();
-  odom_pred_error_ = imu_pred_error_;
+  motion_pred_error_ = init_guess.inverse() * registration_->getFinalTransformation();
 
   return aligned;
 }
@@ -209,13 +211,8 @@ const boost::optional<Eigen::Matrix4f>& PoseEstimator::woPredictionError() const
   return wo_pred_error_;
 }
 
-const boost::optional<Eigen::Matrix4f>& PoseEstimator::imuPredictionError() const
+const boost::optional<Eigen::Matrix4f>& PoseEstimator::motionPredictionError() const
 {
-  return imu_pred_error_;
-}
-
-const boost::optional<Eigen::Matrix4f>& PoseEstimator::odomPredictionError() const
-{
-  return odom_pred_error_;
+  return motion_pred_error_;
 }
 }  // namespace hdl_localization
