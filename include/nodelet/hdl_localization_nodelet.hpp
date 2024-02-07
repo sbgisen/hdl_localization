@@ -3,7 +3,6 @@
 
 #include <mutex>
 #include <memory>
-#include <iostream>
 
 #include <ros/ros.h>
 #include <pcl_ros/point_cloud.h>
@@ -58,6 +57,8 @@ private:
   pcl::PointCloud<PointT>::ConstPtr downsample(const pcl::PointCloud<PointT>::ConstPtr& cloud) const;
   void publishOdometry(const ros::Time& stamp, const Eigen::Matrix4f& pose, const double fitness_score);
   void publishScanMatchingStatus(const std_msgs::Header& header, pcl::PointCloud<pcl::PointXYZI>::ConstPtr aligned);
+  bool getOdomFromTf(nav_msgs::Odometry& odom_out);
+  void resetTfBuffer();
 
 private:
   // ROS
@@ -71,6 +72,7 @@ private:
   bool tf_broadcast_;
   double cool_time_duration_;
   bool use_odom_;
+  bool init_with_tf_;
   ros::Time odom_stamp_last_;
 
   bool use_imu_;

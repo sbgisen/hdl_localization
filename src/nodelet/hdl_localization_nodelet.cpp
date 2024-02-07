@@ -36,6 +36,7 @@ void HdlLocalizationNodelet::onInit()
   bool specify_init_pose = private_nh_.param<bool>("specify_init_pose", false);
   Eigen::Vector3f init_position = Eigen::Vector3f::Zero();
   Eigen::Quaternionf init_orientation = Eigen::Quaternionf::Identity();
+  init_with_tf_ = private_nh_.param<bool>("init_with_tf", true);
   if (specify_init_pose)
   {
     init_position.x() = private_nh_.param<double>("init_pos_x", 0.0);
@@ -45,6 +46,38 @@ void HdlLocalizationNodelet::onInit()
     init_orientation.y() = private_nh_.param<double>("init_ori_y", 0.0);
     init_orientation.z() = private_nh_.param<double>("init_ori_z", 0.0);
     init_orientation.w() = private_nh_.param<double>("init_ori_w", 1.0);
+  }
+  else if (init_with_tf_)
+  {
+    if (!tf_broadcast_ && tf_buffer_.canTransform(global_frame_id_, base_frame_id_, ros::Time(0), ros::Duration(2.0)))
+    {
+      // If global frame and base frame already exist, initial position is set to keep the relative position
+      geometry_msgs::TransformStamped tf_map2base =
+          tf_buffer_.lookupTransform(global_frame_id_, base_frame_id_, ros::Time(0));
+      init_position = Eigen::Vector3f(tf_map2base.transform.translation.x, tf_map2base.transform.translation.y,
+                                      tf_map2base.transform.translation.z);
+      init_orientation = Eigen::Quaternionf(tf_map2base.transform.rotation.w, tf_map2base.transform.rotation.x,
+                                            tf_map2base.transform.rotation.y, tf_map2base.transform.rotation.z);
+      NODELET_INFO("global frame(%s) and base frame(%s) exist, use them for initial pose", global_frame_id_.c_str(),
+                   base_frame_id_.c_str());
+    }
+    else if (use_odom_ && tf_buffer_.canTransform(odom_frame_id_, base_frame_id_, ros::Time(0), ros::Duration(2.0)))
+    {
+      // If there is no global frame, also check the odom frame
+      geometry_msgs::TransformStamped tf_odom2base =
+          tf_buffer_.lookupTransform(odom_frame_id_, base_frame_id_, ros::Time(0));
+      init_position = Eigen::Vector3f(tf_odom2base.transform.translation.x, tf_odom2base.transform.translation.y,
+                                      tf_odom2base.transform.translation.z);
+      init_orientation = Eigen::Quaternionf(tf_odom2base.transform.rotation.w, tf_odom2base.transform.rotation.x,
+                                            tf_odom2base.transform.rotation.y, tf_odom2base.transform.rotation.z);
+      NODELET_INFO("global frame(%s) does not exist, use odom frame(%s) instead", global_frame_id_.c_str(),
+                   odom_frame_id_.c_str());
+    }
+    else
+    {
+      NODELET_WARN("global frame(%s) and odom frame(%s) do not exist, skip initialization", global_frame_id_.c_str(),
+                   odom_frame_id_.c_str());
+    }
   }
   // Initialize pose estimator
   NODELET_INFO("initialize pose estimator with specified parameters!!");
@@ -234,11 +267,13 @@ void HdlLocalizationNodelet::pointsCallback(const sensor_msgs::PointCloud2ConstP
   // transform pointcloud into base_frame_id
   std::string tf_error;
   pcl::PointCloud<HdlLocalizationNodelet::PointT>::Ptr cloud(new pcl::PointCloud<HdlLocalizationNodelet::PointT>());
-  if (this->tf_buffer_.canTransform(base_frame_id_, pcl_cloud->header.frame_id, stamp, ros::Duration(0.1), &tf_error))
+  if (this->tf_buffer_.canTransform(base_frame_id_, pcl_cloud->header.frame_id, ros::Time(0), ros::Duration(0.1),
+                                    &tf_error))
   {
     if (!pcl_ros::transformPointCloud(base_frame_id_, *pcl_cloud, *cloud, this->tf_buffer_))
     {
-      NODELET_ERROR("point cloud cannot be transformed into target frame!!");
+      NODELET_ERROR("point cloud cannot be transformed into target frame (%s -> %s)",
+                    pcl_cloud->header.frame_id.c_str(), base_frame_id_.c_str());
       return;
     }
   }
@@ -291,61 +326,17 @@ void HdlLocalizationNodelet::pointsCallback(const sensor_msgs::PointCloud2ConstP
   }
   else if (use_odom_)
   {
-    // PointClouds + Oodometry prediction
-    if (odom_frame_id_.empty() || base_frame_id_.empty())
+    // PointClouds + Odometry prediction
+    nav_msgs::Odometry odom;
+    if (!getOdomFromTf(odom))
     {
-      NODELET_WARN_THROTTLE(10.0, "odom_frame_id_ or base_frame_id_ is not set");
+      pose_estimator_->predict(stamp);
       return;
     }
-    if (tf_buffer_.canTransform(base_frame_id_, odom_stamp_last_, base_frame_id_, ros::Time(0), odom_frame_id_,
-                                ros::Duration(0.1)) &&
-        tf_buffer_.canTransform(odom_frame_id_, base_frame_id_, ros::Time(0), ros::Duration(0.1)))
-    {
-      // Get the amount of odometry movement since the last calculation
-      // Coordinate system where the front of the robot is x
-      geometry_msgs::TransformStamped odom_delta =
-          tf_buffer_.lookupTransform(base_frame_id_, odom_stamp_last_, base_frame_id_, ros::Time(0), odom_frame_id_);
-      // Get the latest base_frame_ to get the time
-      geometry_msgs::TransformStamped odom_now =
-          tf_buffer_.lookupTransform(odom_frame_id_, base_frame_id_, ros::Time(0));
-      ros::Time odom_stamp = odom_now.header.stamp;
-      ros::Duration odom_time_diff = odom_stamp - odom_stamp_last_;
-      double odom_time_diff_sec = odom_time_diff.toSec();
-      if (odom_delta.header.stamp.isZero() || odom_time_diff_sec <= 0)
-      {
-        NODELET_WARN_THROTTLE(10.0, "Wrong timestamp detected: odom_time_diff_sec = %f", odom_time_diff_sec);
-      }
-      else
-      {
-        Eigen::Vector3f odom_travel_linear(odom_delta.transform.translation.x, odom_delta.transform.translation.y,
-                                           odom_delta.transform.translation.z);
-        Eigen::Vector3f odom_twist_linear = odom_travel_linear / odom_time_diff_sec;
-        tf::Quaternion odom_travel_angular(odom_delta.transform.rotation.x, odom_delta.transform.rotation.y,
-                                           odom_delta.transform.rotation.z, odom_delta.transform.rotation.w);
-        double roll, pitch, yaw;
-        tf::Matrix3x3(odom_travel_angular).getRPY(roll, pitch, yaw);
-        Eigen::Vector3f odom_twist_angular(roll / odom_time_diff_sec, pitch / odom_time_diff_sec,
-                                           yaw / odom_time_diff_sec);
-        pose_estimator_->predictOdom(odom_stamp, odom_twist_linear, odom_twist_angular);
-      }
-      odom_stamp_last_ = odom_stamp;
-    }
-    else
-    {
-      if (tf_buffer_.canTransform(odom_frame_id_, base_frame_id_, ros::Time(0), ros::Duration(0.1)))
-      {
-        NODELET_WARN_THROTTLE(10.0, "The last timestamp is wrong, skip localization");
-        // Get the latest base_frame_ to get the time
-        geometry_msgs::TransformStamped odom_now =
-            tf_buffer_.lookupTransform(odom_frame_id_, base_frame_id_, ros::Time(0));
-        odom_stamp_last_ = odom_now.header.stamp;
-      }
-      else
-      {
-        NODELET_WARN_STREAM("Failed to look up transform between " << cloud->header.frame_id << " and "
-                                                                   << odom_frame_id_);
-      }
-    }
+    Eigen::Vector3f odom_twist_linear(odom.twist.twist.linear.x, odom.twist.twist.linear.y, odom.twist.twist.linear.z);
+    Eigen::Vector3f odom_twist_angular(odom.twist.twist.angular.x, odom.twist.twist.angular.y,
+                                       odom.twist.twist.angular.z);
+    pose_estimator_->predictOdom(odom.header.stamp, odom_twist_linear, odom_twist_angular);
   }
   else
   {
@@ -460,20 +451,51 @@ bool HdlLocalizationNodelet::relocalize(std_srvs::EmptyRequest& /*req*/, std_srv
 void HdlLocalizationNodelet::initialposeCallback(const geometry_msgs::PoseWithCovarianceStampedConstPtr& pose_msg)
 {
   NODELET_INFO("initialpose received");
+  // initialize tf_global2rviz on origin
+  geometry_msgs::TransformStamped tf_global2rviz;
+  tf_global2rviz.transform.translation.x = 0.0;
+  tf_global2rviz.transform.translation.y = 0.0;
+  tf_global2rviz.transform.translation.z = 0.0;
+  tf_global2rviz.transform.rotation.x = 0.0;
+  tf_global2rviz.transform.rotation.y = 0.0;
+  tf_global2rviz.transform.rotation.z = 0.0;
+  tf_global2rviz.transform.rotation.w = 1.0;
+  // If the origin of rviz and the global(map) frame are different, coordinate transformation is performed
+  if (init_with_tf_ && global_frame_id_ != pose_msg->header.frame_id && !global_frame_id_.empty() &&
+      !pose_msg->header.frame_id.empty())
+  {
+    tf_global2rviz =
+        tf_buffer_.lookupTransform(global_frame_id_, pose_msg->header.frame_id, ros::Time(0), ros::Duration(2.0));
+    if (tf_global2rviz.header.frame_id != global_frame_id_)
+    {
+      ROS_ERROR("[Failed to get transform from %s to %s", global_frame_id_.c_str(), pose_msg->header.frame_id.c_str());
+    }
+  }
+  tf2::Vector3 vec_rviz2robot(pose_msg->pose.pose.position.x, pose_msg->pose.pose.position.y,
+                              pose_msg->pose.pose.position.z);
+  tf2::Quaternion q_rviz2robot(pose_msg->pose.pose.orientation.x, pose_msg->pose.pose.orientation.y,
+                               pose_msg->pose.pose.orientation.z, pose_msg->pose.pose.orientation.w);
+  // Get initial pose from global to robot
+  tf2::Vector3 vec_global2rviz(tf_global2rviz.transform.translation.x, tf_global2rviz.transform.translation.y,
+                               tf_global2rviz.transform.translation.z);
+  tf2::Quaternion q_global2rviz(tf_global2rviz.transform.rotation.x, tf_global2rviz.transform.rotation.y,
+                                tf_global2rviz.transform.rotation.z, tf_global2rviz.transform.rotation.w);
+  tf2::Vector3 vec_global2robot = vec_global2rviz + (tf2::Matrix3x3(q_global2rviz) * vec_rviz2robot);
+  tf2::Quaternion q_global2robot = q_global2rviz * q_rviz2robot;
+  Eigen::Vector3f init_position = Eigen::Vector3f(vec_global2robot.x(), vec_global2robot.y(), vec_global2robot.z());
+  Eigen::Quaternionf init_orientation =
+      Eigen::Quaternionf(q_global2robot.w(), q_global2robot.x(), q_global2robot.y(), q_global2robot.z());
   if (use_odom_)
   {
-    odom_stamp_last_ = pose_msg->header.stamp;
-    tf_buffer_.clear();
+    resetTfBuffer();
   }
   if (use_imu_)
   {
     imu_data_.clear();
   }
   std::lock_guard<std::mutex> lock(pose_estimator_mutex_);
-  const auto& p = pose_msg->pose.pose.position;
-  const auto& q = pose_msg->pose.pose.orientation;
-  pose_estimator_.reset(new hdl_localization::PoseEstimator(
-      registration_, Eigen::Vector3f(p.x, p.y, p.z), Eigen::Quaternionf(q.w, q.x, q.y, q.z), cool_time_duration_));
+  pose_estimator_.reset(
+      new hdl_localization::PoseEstimator(registration_, init_position, init_orientation, cool_time_duration_));
 }
 
 /**
@@ -641,6 +663,89 @@ void HdlLocalizationNodelet::publishScanMatchingStatus(const std_msgs::Header& h
             .transform);
   }
   status_pub_.publish(status);
+}
+
+bool HdlLocalizationNodelet::getOdomFromTf(nav_msgs::Odometry& odom_out)
+{
+  double initialize_timeout = 0.1;
+  if (odom_frame_id_.empty() || base_frame_id_.empty())
+  {
+    NODELET_WARN_THROTTLE(1.0, "odom_frame_id(%s) or base_frame_id(%s) is not set", odom_frame_id_.c_str(),
+                          base_frame_id_.c_str());
+    return false;
+  }
+  if (tf_buffer_.canTransform(base_frame_id_, odom_stamp_last_, base_frame_id_, ros::Time(0), odom_frame_id_,
+                              ros::Duration(initialize_timeout)) &&
+      tf_buffer_.canTransform(odom_frame_id_, base_frame_id_, ros::Time(0), ros::Duration(initialize_timeout)))
+  {
+    // Get the amount of odometry movement since the last calculation
+    // Coordinate system where the front of the robot is x
+    geometry_msgs::TransformStamped odom_delta =
+        tf_buffer_.lookupTransform(base_frame_id_, odom_stamp_last_, base_frame_id_, ros::Time(0), odom_frame_id_);
+    // Get the latest base_frame_ to get the time
+    geometry_msgs::TransformStamped odom_now = tf_buffer_.lookupTransform(odom_frame_id_, base_frame_id_, ros::Time(0));
+    ros::Time odom_stamp = odom_now.header.stamp;
+    double odom_time_diff = (odom_stamp - odom_stamp_last_).toSec();
+    if (odom_delta.header.stamp.isZero() || odom_time_diff < std::numeric_limits<double>::epsilon())
+    {
+      NODELET_WARN("Wrong timestamp detected: odom_time_diff = %f", odom_time_diff);
+      odom_stamp_last_ = odom_stamp;
+      return false;
+    }
+    else
+    {
+      Eigen::Vector3f odom_travel_linear(odom_delta.transform.translation.x, odom_delta.transform.translation.y,
+                                         odom_delta.transform.translation.z);
+      Eigen::Vector3f odom_twist_linear = odom_travel_linear / odom_time_diff;
+      tf::Quaternion odom_travel_angular(odom_delta.transform.rotation.x, odom_delta.transform.rotation.y,
+                                         odom_delta.transform.rotation.z, odom_delta.transform.rotation.w);
+      double roll, pitch, yaw;
+      tf::Matrix3x3(odom_travel_angular).getRPY(roll, pitch, yaw);
+      Eigen::Vector3f odom_twist_angular(roll / odom_time_diff, pitch / odom_time_diff, yaw / odom_time_diff);
+      odom_out.header.stamp = odom_stamp;
+      odom_out.header.frame_id = odom_frame_id_;
+      odom_out.child_frame_id = base_frame_id_;
+      odom_out.pose.pose.position.x = odom_now.transform.translation.x;
+      odom_out.pose.pose.position.y = odom_now.transform.translation.y;
+      odom_out.pose.pose.position.z = odom_now.transform.translation.z;
+      odom_out.pose.pose.orientation.x = odom_now.transform.rotation.x;
+      odom_out.pose.pose.orientation.y = odom_now.transform.rotation.y;
+      odom_out.pose.pose.orientation.z = odom_now.transform.rotation.z;
+      odom_out.pose.pose.orientation.w = odom_now.transform.rotation.w;
+      odom_out.twist.twist.linear.x = odom_twist_linear.x();
+      odom_out.twist.twist.linear.y = odom_twist_linear.y();
+      odom_out.twist.twist.linear.z = odom_twist_linear.z();
+      odom_out.twist.twist.angular.x = odom_twist_angular.x();
+      odom_out.twist.twist.angular.y = odom_twist_angular.y();
+      odom_out.twist.twist.angular.z = odom_twist_angular.z();
+    }
+    odom_stamp_last_ = odom_stamp;
+    return true;
+  }
+  else
+  {
+    if (tf_buffer_.canTransform(odom_frame_id_, base_frame_id_, ros::Time(0), ros::Duration(initialize_timeout)))
+    {
+      NODELET_INFO("Received the first odom transform");
+      // Get the latest base_frame_ to get the time
+      geometry_msgs::TransformStamped odom_now =
+          tf_buffer_.lookupTransform(odom_frame_id_, base_frame_id_, ros::Time(0));
+      odom_stamp_last_ = odom_now.header.stamp;
+      return false;
+    }
+    else
+    {
+      NODELET_WARN_STREAM("Failed to look up transform between " << odom_frame_id_ << " and " << odom_frame_id_);
+      return false;
+    }
+  }
+  return false;
+}
+
+void HdlLocalizationNodelet::resetTfBuffer()
+{
+  tf_buffer_.clear();
+  odom_stamp_last_ = ros::Time(0);
 }
 
 }  // namespace hdl_localization
