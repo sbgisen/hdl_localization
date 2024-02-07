@@ -3,8 +3,6 @@
 
 #include <mutex>
 #include <memory>
-#include <iostream>
-#include <limits>
 
 #include <ros/ros.h>
 #include <pcl_ros/point_cloud.h>
@@ -22,7 +20,6 @@
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <nav_msgs/Odometry.h>
-#include <nodelet/nodelet.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 
 #include <pcl/filters/voxel_grid.h>
