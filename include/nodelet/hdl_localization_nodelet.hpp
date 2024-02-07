@@ -4,6 +4,7 @@
 #include <mutex>
 #include <memory>
 #include <iostream>
+#include <limits>
 
 #include <ros/ros.h>
 #include <pcl_ros/point_cloud.h>
@@ -21,6 +22,7 @@
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <nav_msgs/Odometry.h>
+#include <nodelet/nodelet.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 
 #include <pcl/filters/voxel_grid.h>
@@ -58,6 +60,8 @@ private:
   pcl::PointCloud<PointT>::ConstPtr downsample(const pcl::PointCloud<PointT>::ConstPtr& cloud) const;
   void publishOdometry(const ros::Time& stamp, const Eigen::Matrix4f& pose, const double fitness_score);
   void publishScanMatchingStatus(const std_msgs::Header& header, pcl::PointCloud<pcl::PointXYZI>::ConstPtr aligned);
+  bool getOdomFromTf(nav_msgs::Odometry& odom_out);
+  void resetTfBuffer();
 
 private:
   // ROS
