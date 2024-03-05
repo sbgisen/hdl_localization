@@ -42,7 +42,9 @@ Please refer to the repository below and use the docker easily.
 
 ## Parameters
 All configurable parameters are listed in *launch/hdl_localization.launch* as ros params.
-The estimated pose can be reset using using "2D Pose Estimate" on rviz
+The estimated pose can be reset using using "2D Pose Estimate" on rviz.
+The parametor *odom_covariance_coefficient* is a coefficient of odom covariance.
+Odom covariance is caluculated from ths fitness score of scan matching.
 
 ## Topics
 - ***/odom*** (nav_msgs/Odometry)
