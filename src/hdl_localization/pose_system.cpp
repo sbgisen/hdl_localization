@@ -11,17 +11,13 @@ PoseSystem::PoseSystem()
 PoseSystem::VectorXt PoseSystem::f(const VectorXt& state) const
 {
   VectorXt state_next(16);
-
   Vector3t pt = state.middleRows(0, 3);
   Vector3t vt = state.middleRows(3, 3);
   Quaterniont qt(state[6], state[7], state[8], state[9]);
   qt.normalize();
 
-  Vector3t acc_bias = state.middleRows(10, 3);
-  Vector3t gyro_bias = state.middleRows(13, 3);
-
   // position
-  state_next.middleRows(0, 3) = pt + vt * dt_;  //
+  state_next.middleRows(0, 3) = pt + vt * dt_;
 
   // velocity
   state_next.middleRows(3, 3) = vt;
@@ -39,7 +35,6 @@ PoseSystem::VectorXt PoseSystem::fImu(const VectorXt& state, const Eigen::Vector
                                       const Eigen::Vector3f& imu_gyro) const
 {
   VectorXt state_next(16);
-
   Vector3t pt = state.middleRows(0, 3);
   Vector3t vt = state.middleRows(3, 3);
   Quaterniont qt(state[6], state[7], state[8], state[9]);
@@ -48,26 +43,21 @@ PoseSystem::VectorXt PoseSystem::fImu(const VectorXt& state, const Eigen::Vector
   Vector3t acc_bias = state.middleRows(10, 3);
   Vector3t gyro_bias = state.middleRows(13, 3);
 
-  const Vector3t& raw_acc = imu_acc;
-  const Vector3t& raw_gyro = imu_gyro;
-
   // position
-  state_next.middleRows(0, 3) = pt + vt * dt_;  //
+  Vector3t pt_next = pt + vt * dt_;
+  state_next.middleRows(0, 3) = pt_next;
 
   // velocity
   Vector3t g(0.0f, 0.0f, 9.80665f);
-  Vector3t acc = qt * (raw_acc - acc_bias);
-  state_next.middleRows(3, 3) = vt + (acc - g) * dt_;
-  // state_next.middleRows(3, 3) = vt; // + (acc - g) * dt_;		// acceleration didn't contribute to accuracy due to
-  // large noise
+  Vector3t acc = qt * (imu_acc - acc_bias) - g;
+  Vector3t vt_next = vt + acc * dt_;
+  state_next.middleRows(3, 3) = vt_next;
 
   // orientation
-  Vector3t gyro = raw_gyro - gyro_bias;
-  Quaterniont dq(1, gyro[0] * dt_ / 2, gyro[1] * dt_ / 2, gyro[2] * dt_ / 2);
-  dq.normalize();
-  Quaterniont qt_next = (qt * dq).normalized();
+  Vector3t gyro = imu_gyro - gyro_bias;
+  Quaterniont dq = Quaterniont(0, gyro[0] * dt_ / 2.0, gyro[1] * dt_ / 2.0, gyro[2] * dt_ / 2.0) * qt;
+  Quaterniont qt_next = Quaterniont(qt.w() + dq.w(), qt.x() + dq.x(), qt.y() + dq.y(), qt.z() + dq.z()).normalized();
   state_next.middleRows(6, 4) << qt_next.w(), qt_next.x(), qt_next.y(), qt_next.z();
-
   state_next.middleRows(10, 3) = state.middleRows(10, 3);  // constant bias on acceleration
   state_next.middleRows(13, 3) = state.middleRows(13, 3);  // constant bias on angular velocity
 
@@ -83,22 +73,19 @@ PoseSystem::VectorXt PoseSystem::fOdom(const VectorXt& state, const Eigen::Vecto
   Quaterniont qt(state[6], state[7], state[8], state[9]);
   qt.normalize();
 
-  Vector3t lin_vel_raw = odom_twist_lin;
-  Vector3t ang_vel_raw = odom_twist_ang;
-
   // position
-  state_next.middleRows(0, 3) = pt + vt * dt_;
+  Vector3t pt_next = pt + vt * dt_;
+  state_next.middleRows(0, 3) = pt_next;
 
   // velocity
-  Vector3t vel = qt * lin_vel_raw;
-  state_next.middleRows(3, 3) = vel;
+  Vector3t vt_next = qt * odom_twist_lin;
+  state_next.middleRows(3, 3) = vt_next;
 
   // orientation
-  Quaterniont dq(1, ang_vel_raw[0] * dt_ / 2, ang_vel_raw[1] * dt_ / 2, ang_vel_raw[2] * dt_ / 2);
-  dq.normalize();
-  Quaterniont qt_next = (qt * dq).normalized();
+  Quaterniont dq =
+      Quaterniont(0, odom_twist_ang[0] * dt_ / 2.0, odom_twist_ang[1] * dt_ / 2.0, odom_twist_ang[2] * dt_ / 2.0) * qt;
+  Quaterniont qt_next = Quaterniont(qt.w() + dq.w(), qt.x() + dq.x(), qt.y() + dq.y(), qt.z() + dq.z()).normalized();
   state_next.middleRows(6, 4) << qt_next.w(), qt_next.x(), qt_next.y(), qt_next.z();
-
   state_next.middleRows(10, 3) = state.middleRows(10, 3);  // constant bias on acceleration
   state_next.middleRows(13, 3) = state.middleRows(13, 3);  // constant bias on angular velocity
 
