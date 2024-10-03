@@ -8,7 +8,7 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
-#include <pcl/registration/registration.h>
+#include <pclomp/ndt_omp.h>
 
 #include <hdl_localization/pose_system.hpp>
 #include <ukf/unscented_kalman_filter.hpp>
@@ -42,8 +42,9 @@ public:
    * @param quat                initial orientation
    * @param cool_time_duration  during "cool time", prediction is not performed
    */
-  PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& registration, const Eigen::Vector3f& initial_position,
-                const Eigen::Quaternionf& initial_orientation, double cool_time_duration = 1.0);
+  PoseEstimator(pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr& registration,
+                const Eigen::Vector3f& initial_position, const Eigen::Quaternionf& initial_orientation,
+                double cool_time_duration = 1.0);
   ~PoseEstimator();
 
   /**
@@ -101,7 +102,7 @@ private:
   boost::optional<Eigen::Matrix4f> wo_pred_error_;
   boost::optional<Eigen::Matrix4f> motion_pred_error_;
 
-  pcl::Registration<PointT, PointT>::Ptr registration_;
+  pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr registration_;
 };
 
 }  // namespace hdl_localization

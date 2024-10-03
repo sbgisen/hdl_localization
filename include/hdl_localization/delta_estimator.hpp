@@ -5,7 +5,7 @@
 #include <mutex>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
-#include <pcl/registration/registration.h>
+#include <pclomp/ndt_omp.h>
 
 namespace hdl_localization
 {
@@ -14,7 +14,7 @@ class DeltaEstimator
 public:
   using PointT = pcl::PointXYZI;
 
-  DeltaEstimator(pcl::Registration<PointT, PointT>::Ptr reg);
+  DeltaEstimator(pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr reg);
   ~DeltaEstimator();
 
   void reset();
@@ -24,7 +24,7 @@ public:
 private:
   mutable std::mutex mutex_;
   Eigen::Isometry3f delta_;
-  pcl::Registration<PointT, PointT>::Ptr reg_;
+  pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr reg_;
   pcl::PointCloud<PointT>::ConstPtr last_frame_;
 };
 

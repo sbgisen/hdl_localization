@@ -2,7 +2,7 @@
 
 namespace hdl_localization
 {
-DeltaEstimator::DeltaEstimator(pcl::Registration<PointT, PointT>::Ptr reg)
+DeltaEstimator::DeltaEstimator(pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr reg)
   : delta_(Eigen::Isometry3f::Identity()), reg_(reg)
 {
 }

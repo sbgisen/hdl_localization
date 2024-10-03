@@ -9,7 +9,7 @@ namespace hdl_localization
  * @param quat                initial orientation
  * @param cool_time_duration  during "cool time", prediction is not performed
  */
-PoseEstimator::PoseEstimator(pcl::Registration<PointT, PointT>::Ptr& registration,
+PoseEstimator::PoseEstimator(pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr& registration,
                              const Eigen::Vector3f& initial_position, const Eigen::Quaternionf& initial_orientation,
                              double cool_time_duration)
   : registration_(registration), cool_time_duration_(cool_time_duration)
@@ -155,6 +155,8 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
   registration_->setInputSource(cloud);
   registration_->align(*aligned, init_guess);
   fitness_score = registration_->getFitnessScore();
+  double max_probability = 3.3;
+  double transform_probability = std::min(1.0, registration_->getTransformationProbability() / max_probability);
 
   Eigen::Matrix4f trans = registration_->getFinalTransformation();
   Eigen::Vector3f p = trans.block<3, 1>(0, 3);

@@ -118,7 +118,7 @@ void HdlLocalizationNodelet::onInit()
   }
 }
 
-pcl::Registration<HdlLocalizationNodelet::PointT, HdlLocalizationNodelet::PointT>::Ptr
+pclomp::NormalDistributionsTransform<HdlLocalizationNodelet::PointT, HdlLocalizationNodelet::PointT>::Ptr
 HdlLocalizationNodelet::createRegistration() const
 {
   std::string reg_method = private_nh_.param<std::string>("reg_method", "NDT_OMP");

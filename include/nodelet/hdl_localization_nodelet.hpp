@@ -47,7 +47,7 @@ public:
   void onInit() override;
 
 private:
-  pcl::Registration<PointT, PointT>::Ptr createRegistration() const;
+  pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr createRegistration() const;
   void initializeParams();
   void imuCallback(const sensor_msgs::ImuConstPtr& imu_msg);
   void pointsCallback(const sensor_msgs::PointCloud2ConstPtr& points_msg);
@@ -98,7 +98,7 @@ private:
   // globalmap_ and registration method
   pcl::PointCloud<PointT>::Ptr globalmap_;
   pcl::Filter<PointT>::Ptr downsample_filter_;
-  pcl::Registration<PointT, PointT>::Ptr registration_;
+  pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr registration_;
 
   // pose estimator
   std::mutex pose_estimator_mutex_;
