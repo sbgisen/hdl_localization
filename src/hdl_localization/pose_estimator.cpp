@@ -138,8 +138,7 @@ void PoseEstimator::predictOdom(const ros::Time& stamp, const Eigen::Vector3f& o
  * @return cloud aligned to the globalmap
  */
 pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Time& stamp,
-                                                                   const pcl::PointCloud<PointT>::ConstPtr& cloud,
-                                                                   double& fitness_score)
+                                                                   const pcl::PointCloud<PointT>::ConstPtr& cloud)
 {
   if (init_stamp_.is_zero())
   {
@@ -154,9 +153,8 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
   pcl::PointCloud<PointT>::Ptr aligned(new pcl::PointCloud<PointT>());
   registration_->setInputSource(cloud);
   registration_->align(*aligned, init_guess);
-  fitness_score = registration_->getFitnessScore();
-  double max_probability = 3.3;
-  double transform_probability = std::min(1.0, registration_->getTransformationProbability() / max_probability);
+  fitness_score_ = registration_->getFitnessScore();
+  transform_probability_ = registration_->getTransformationProbability();
 
   Eigen::Matrix4f trans = registration_->getFinalTransformation();
   Eigen::Vector3f p = trans.block<3, 1>(0, 3);
@@ -183,6 +181,16 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
 ros::Time PoseEstimator::lastCorrectionTime() const
 {
   return last_correction_stamp_;
+}
+
+double PoseEstimator::getFitnessScore() const
+{
+  return fitness_score_;
+}
+
+double PoseEstimator::getTransformProbability() const
+{
+  return transform_probability_;
 }
 
 Eigen::Vector3f PoseEstimator::pos() const

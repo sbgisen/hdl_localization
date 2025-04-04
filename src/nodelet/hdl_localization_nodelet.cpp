@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <nodelet/hdl_localization_nodelet.hpp>
 
 namespace hdl_localization
@@ -307,9 +308,7 @@ void HdlLocalizationNodelet::pointsCallback(const sensor_msgs::PointCloud2ConstP
     pose_estimator_->predict(stamp);
   }
   // Perform scan matching using the calculated position as the initial value
-  double fitness_score;
-  auto aligned = pose_estimator_->correct(stamp, filtered, fitness_score);
-
+  auto aligned = pose_estimator_->correct(stamp, filtered);
   if (aligned_pub_.getNumSubscribers())
   {
     aligned->header.frame_id = global_frame_id_;
@@ -322,7 +321,20 @@ void HdlLocalizationNodelet::pointsCallback(const sensor_msgs::PointCloud2ConstP
     publishScanMatchingStatus(points_msg->header, aligned);
   }
 
-  publishOdometry(points_msg->header.stamp, pose_estimator_->matrix(), fitness_score);
+  double fitness_score = pose_estimator_->getFitnessScore();
+  double transform_probability = pose_estimator_->getTransformProbability();
+  double fitness_score_threshold = 0.1;
+  double transform_probability_threshold = 3.0;
+  double covariance_max = 1000.0;
+
+  double covariance = fitness_score / fitness_score_threshold * covariance_max +
+                      transform_probability / transform_probability_threshold * covariance_max;
+  if (covariance > covariance_max)
+  {
+    covariance = std::numeric_limits<double>::max();
+  }
+
+  publishOdometry(points_msg->header.stamp, pose_estimator_->matrix(), covariance);
 }
 
 /**

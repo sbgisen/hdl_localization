@@ -75,11 +75,12 @@ public:
    * @param cloud   input cloud
    * @return cloud aligned to the globalmap
    */
-  pcl::PointCloud<PointT>::Ptr correct(const ros::Time& stamp, const pcl::PointCloud<PointT>::ConstPtr& cloud,
-                                       double& fitness_score);
+  pcl::PointCloud<PointT>::Ptr correct(const ros::Time& stamp, const pcl::PointCloud<PointT>::ConstPtr& cloud);
 
   /* getters */
   ros::Time lastCorrectionTime() const;
+  double getFitnessScore() const;
+  double getTransformProbability() const;
 
   Eigen::Vector3f pos() const;
   Eigen::Vector3f vel() const;
@@ -94,6 +95,8 @@ private:
   ros::Time prev_stamp_;             // when the estimator was updated last time
   ros::Time last_correction_stamp_;  // when the estimator performed the correction step
   double cool_time_duration_;        //
+  double fitness_score_;             // fitness score of the last correction
+  double transform_probability_;     // transformation probability of the last correction
 
   Eigen::MatrixXf process_noise_, odom_process_noise_;
   std::unique_ptr<kkl::alg::UnscentedKalmanFilterX<float, PoseSystem>> ukf_;
