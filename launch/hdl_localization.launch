@@ -26,7 +26,7 @@
 
     <!-- globalmap_server_nodelet -->
     <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet" args="load hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)">
-    <param name="globalmap_pcd" value="/home/gisen/3d_maps/mlit_kawasaki/$(arg map_name).pcd" />
+    <param name="globalmap_pcd" value="/home/gisen/3d_maps/shin-yurigaoka/$(arg map_name).pcd" />
       <param name="convert_utm_to_local" value="true" />
       <param name="downsample_resolution" value="0.1" />
     </node>
