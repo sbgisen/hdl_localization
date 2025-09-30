@@ -20,10 +20,9 @@
   <arg name="plot_estimation_errors" default="false"/>
   <arg name="use_rviz" default="true"/>
   <arg name="play_speed" default="1"/>
-  
+  <arg name="downsample_resolution" default="0.1"/>
   <!-- Set use_sim_time for bag playback -->
   <param name="use_sim_time" value="true"/>
-  
   <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)"/>
   <!-- in case you use velodyne_driver, comment out the following line -->
   <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager" output="screen"/>
@@ -31,7 +30,7 @@
   <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet" args="load hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)">
     <param name="globalmap_pcd" value="/home/gisen/3d_maps/shin-yurigaoka/$(arg map_name).pcd"/>
     <param name="convert_utm_to_local" value="true"/>
-    <param name="downsample_resolution" value="0.1"/>
+    <param name="downsample_resolution" value="$(arg downsample_resolution)"/>
   </node>
   <!-- hdl_localization_nodelet -->
   <node pkg="nodelet" type="nodelet" name="hdl_localization_nodelet" args="load hdl_localization/HdlLocalizationNodelet $(arg nodelet_manager)">
@@ -55,15 +54,15 @@
     <param name="ndt_neighbor_search_method" value="DIRECT7"/>
     <param name="ndt_neighbor_search_radius" value="2.0"/>
     <param name="ndt_resolution" value="1.0"/>
-    <param name="downsample_resolution" value="0.1"/>
+    <param name="downsample_resolution" value="$(arg downsample_resolution)"/>
     <!-- if "specify_init_pose" is true, pose estimator will be initialized with the following params -->
     <!-- otherwise, you need to input an initial pose with "2D Pose Estimate" on rviz" -->
     <param name="specify_init_pose" value="true"/>
     <!-- Load initial pose from config file -->
-    <rosparam command="load" file="$(find hdl_localization)/config/$(arg initial_pose_config).yaml"/> -->
+    <rosparam command="load" file="$(find hdl_localization)/config/$(arg initial_pose_config).yaml"/>
   </node>
-  <node pkg="rosbag" type="play" name="play" output="screen" args="/mnt/bags-ssd/gisen/shin-yuri/$(arg bag_name).bag -q --pause -r $(arg play_speed) --topics /livox_undistort /livox_imu --clock"/>
-  <node pkg="rosbag" type="record" name="record" output="screen" args="/status /odom -O /mnt/bags-ssd/gisen/shin-yuri/$(arg bag_name)_$(arg map_name)_def"/>
+  <node pkg="rosbag" type="play" name="play" output="screen" args="/mnt/bags-ssd/gisen/shin-yuri/$(arg bag_name).bag -q --pause -r $(arg play_speed) --topics /livox_undistort /livox_imu  /insta360/rear/image_rect_color/compressed --clock"/>
+  <node pkg="rosbag" type="record" name="record" output="screen" args="/status /odom -O /mnt/bags-ssd/gisen/shin-yuri/$(arg bag_name)_$(arg map_name)_$(arg downsample_resolution)_def"/>
   <node pkg="hdl_localization" type="plot_status.py" name="plot_estimation_errors" if="$(arg plot_estimation_errors)"/>
   <group if="$(arg use_rviz)">
     <node pkg="rviz" type="rviz" name="rviz" args="-d $(find hdl_localization)/rviz/hdl_localization.rviz"/>
